@@ -38,15 +38,3 @@ export async function getViews(): Promise<Views> {
   return { total, days };
 }
 
-/** Markers written today — i.e. which visit number the current hit is. */
-export async function countToday(): Promise<number> {
-  const day = new Date().toISOString().slice(0, 10);
-  let n = 0;
-  let cursor: string | undefined;
-  do {
-    const res = await list({ prefix: `v/${day}/`, token: token(), cursor, limit: 1000 });
-    n += res.blobs.length;
-    cursor = res.hasMore ? res.cursor : undefined;
-  } while (cursor);
-  return n;
-}

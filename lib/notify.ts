@@ -11,8 +11,6 @@ export interface Visit {
   city: string | null;
   country: string | null;
   ua: string | null;
-  /** null when the view store is unreachable — the email still goes out. */
-  countToday: number | null;
 }
 
 const BOT =
@@ -72,9 +70,16 @@ const when = () =>
     timeStyle: "short",
   }).format(new Date());
 
-// Fallback tally for when the view store is down. Per-instance and lossy, but
-// it keeps the daily cap meaningful instead of unbounded.
-let seen = 0;
+// Per-instance daily tally. Asking Blob for the real number costs a list() per
+// visit, which is half of what suspended the store — so the count in the email
+// is this instance's, marked approximate rather than pretending to be global.
+let tally = { day: "", n: 0 };
+
+function nextCount(): number {
+  const day = new Date().toISOString().slice(0, 10);
+  if (tally.day !== day) tally = { day, n: 0 };
+  return ++tally.n;
+}
 
 export async function notifyVisit(v: Visit): Promise<void> {
   const key = process.env.RESEND_API_KEY;
@@ -82,7 +87,7 @@ export async function notifyVisit(v: Visit): Promise<void> {
   if (!key || !to) return; // not configured — visits still count, just silently
   if (isBot(v.ua)) return;
 
-  const n = v.countToday ?? ++seen;
+  const n = nextCount();
   const cap = Number(process.env.NOTIFY_DAILY_CAP ?? 20);
   if (n > cap) return;
   const last = n === cap;
@@ -90,9 +95,7 @@ export async function notifyVisit(v: Visit): Promise<void> {
   const lines = [
     `${place(v.city, v.country)} · ${device(v.ua)}`,
     `ref: ${source(v.referrer)}`,
-    v.countToday === null
-      ? `${when()} · visit ~${n} (view store unreachable)`
-      : `${when()} · visit ${n} today`,
+    `${when()} · visit ~${n} today`,
   ];
   if (last) lines.push(`(daily cap of ${cap} reached — no more emails until tomorrow)`);
 

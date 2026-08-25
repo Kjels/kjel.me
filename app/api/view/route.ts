@@ -1,4 +1,4 @@
-import { bumpView, countToday } from "@/lib/views";
+import { bumpView } from "@/lib/views";
 import { notifyVisit } from "@/lib/notify";
 
 export async function POST(request: Request) {
@@ -6,12 +6,10 @@ export async function POST(request: Request) {
     .json()
     .catch(() => ({}) as { path?: string; referrer?: string | null });
 
-  // The email is the point; the counter is bookkeeping. A dead Blob store must
-  // not swallow the notification, so count failures are logged and shrugged off.
-  let count: number | null = null;
+  // The email is the point; the marker is bookkeeping. A blocked store must not
+  // swallow the notification, so a failed write is logged and shrugged off.
   try {
     await bumpView();
-    count = await countToday();
   } catch (err) {
     console.error("[view] blob unavailable", err);
   }
@@ -24,8 +22,7 @@ export async function POST(request: Request) {
     city: city ? decodeURIComponent(city) : null,
     country: h.get("x-vercel-ip-country"),
     ua: h.get("user-agent"),
-    countToday: count,
   });
 
-  return Response.json({ ok: true, counted: count !== null });
+  return Response.json({ ok: true });
 }
