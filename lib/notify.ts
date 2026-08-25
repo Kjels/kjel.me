@@ -65,7 +65,7 @@ function place(city: string | null, country: string | null): string {
 
 const when = () =>
   new Intl.DateTimeFormat("en-GB", {
-    timeZone: process.env.NOTIFY_TZ ?? "Europe/London",
+    timeZone: process.env.NOTIFY_TZ ?? "America/New_York",
     dateStyle: "medium",
     timeStyle: "short",
   }).format(new Date());
