@@ -244,6 +244,15 @@ export function FlipdotBoard({ text, books }: { text?: BoardText; books?: BoardB
 
     let W = 0, H = 0, SW = 0, SH = 0, K = 1;
     let cols = 0, rows = 0, cw = 0, chh = 0;
+    // one grid for the whole site: DENSITY scales the fixed design resolution
+    // globally — every page, every element, never per-page. 1.8 is the chosen
+    // grid. Debug only: press D to cycle presets, or force with ?d=1.5.
+    const DENSITIES = [1, 1.25, 1.5, 1.8];
+    let density = 1.8;
+    try {
+      const q = parseFloat(new URLSearchParams(location.search).get("d") || "");
+      if (q >= 1 && q <= 2.2) density = q;
+    } catch {}
     let cellLum: Float32Array | null = null;
     let textMask: Uint8Array | null = null;
     let prevLum: Float32Array | null = null, prevMask: Uint8Array | null = null;
@@ -871,16 +880,32 @@ export function FlipdotBoard({ text, books }: { text?: BoardText; books?: BoardB
       if (!reduced) transStart = performance.now() / 1000;
     }
 
-        function buildOffLayer() {
+    // cached dot sprites: one anti-aliased ellipse rendered once per resize,
+    // then blitted per dot — drawImage is several times cheaper than a path
+    // fill, which is what keeps the finer grids at 60fps.
+    let dotSprites: { on: HTMLCanvasElement; off: HTMLCanvasElement; heat: HTMLCanvasElement[] } | null = null;
+    function makeDot(color: string) {
+      const c = document.createElement("canvas");
+      c.width = Math.max(2, Math.ceil(cw * 0.84 * dpr));
+      c.height = Math.max(2, Math.ceil(chh * 0.84 * dpr));
+      const g = c.getContext("2d")!;
+      g.fillStyle = color;
+      g.beginPath();
+      g.ellipse(c.width / 2, c.height / 2, c.width / 2, c.height / 2, 0, 0, Math.PI * 2);
+      g.fill();
+      return c;
+    }
+    function buildSprites() {
+      dotSprites = { on: makeDot(ON), off: makeDot(OFF), heat: HEAT.map(makeDot) };
+    }
+
+    function buildOffLayer() {
       offLayer.width = canvas.width; offLayer.height = canvas.height;
       const octx = offLayer.getContext("2d")!;
       octx.setTransform(dpr, 0, 0, dpr, 0, 0);
       octx.fillStyle = BG; octx.fillRect(0, 0, W, H);
-      octx.fillStyle = OFF;
       for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) {
-        octx.beginPath();
-        octx.ellipse(x * cw + cw / 2, y * chh + chh / 2, cw * 0.42, chh * 0.42, 0, 0, Math.PI * 2);
-        octx.fill();
+        octx.drawImage(dotSprites!.off, x * cw + cw * 0.08, y * chh + chh * 0.08, cw * 0.84, chh * 0.84);
       }
     }
 
@@ -892,10 +917,12 @@ export function FlipdotBoard({ text, books }: { text?: BoardText; books?: BoardB
       // constant and the dot size fluid, so the composition reads identically on
       // every screen — a 4K monitor just stands closer to the same board.
       // cols follow the aspect ratio to keep the dots round.
-      rows = W / H > 1.05 ? 141 : 153;
+      rows = Math.round((W / H > 1.05 ? 141 : 153) * density);
       cols = Math.max(8, Math.round(rows * (W / H)));
       cw = W / cols; chh = H / rows;
-      K = Math.min(1, 1100 / Math.max(W, H));
+      // the sampling cap scales with density so the portrait keeps a constant
+      // ~4.4 source px per cell no matter how fine the grid gets
+      K = Math.min(1, (1100 * density) / Math.max(W, H));
       SW = Math.max(8, Math.round(W * K)); SH = Math.max(8, Math.round(H * K));
       K = SW / W;
       src.width = SW; src.height = SH;
@@ -905,7 +932,8 @@ export function FlipdotBoard({ text, books }: { text?: BoardText; books?: BoardB
       prevLum = null; prevMask = null; transStart = -1;
       clockMask = new Uint8Array(cols * rows); lastClockKey = "";
       playMask = new Uint8Array(cols * rows); lastPlayKey = "";
-        buildOffLayer();
+      buildSprites();
+      buildOffLayer();
       compose(currentPage);
     }
 
@@ -1290,10 +1318,8 @@ export function FlipdotBoard({ text, books }: { text?: BoardText; books?: BoardB
           if (!reduced && heat[i] > 0.02) {
             ctx.fillStyle = BG;
             ctx.fillRect(x * cw - 0.5, y * chh - 0.5, cw + 1, chh + 1);
-            ctx.fillStyle = HEAT[Math.min(7, (heat[i] * 8) | 0)];
-            ctx.beginPath();
-            ctx.ellipse(x * cw + cw / 2, y * chh + chh / 2, cw * 0.42, chh * 0.42, 0, 0, Math.PI * 2);
-            ctx.fill();
+            ctx.drawImage(dotSprites!.heat[Math.min(7, (heat[i] * 8) | 0)],
+              x * cw + cw * 0.08, y * chh + chh * 0.08, cw * 0.84, chh * 0.84);
           }
           continue;
         }
@@ -1301,10 +1327,8 @@ export function FlipdotBoard({ text, books }: { text?: BoardText; books?: BoardB
         ctx.fillRect(x * cw - 0.5, y * chh - 0.5, cw + 1, chh + 1);
         const sx = Math.abs(2 * v - 1);
         if (sx < 0.03) continue;
-        ctx.fillStyle = v > 0.5 ? ON : OFF;
-        ctx.beginPath();
-        ctx.ellipse(x * cw + cw / 2, y * chh + chh / 2, cw * 0.42 * sx, chh * 0.42, 0, 0, Math.PI * 2);
-        ctx.fill();
+        ctx.drawImage(v > 0.5 ? dotSprites!.on : dotSprites!.off,
+          x * cw + cw / 2 - cw * 0.42 * sx, y * chh + chh * 0.08, cw * 0.84 * sx, chh * 0.84);
       }
 
       // laser eyes overlay: the one sanctioned red, and only while the meme is on
@@ -1333,13 +1357,10 @@ export function FlipdotBoard({ text, books }: { text?: BoardText; books?: BoardB
           const uy = nowLink.row + 8;
           if (uy < rows) {
             const n = Math.round(nowLink.wCols * nowLink.hoverP);
-            ctx.fillStyle = ON;
             for (let c = 0; c < n; c++) {
               const xx = nowLink.col + c;
               if (xx >= cols) break;
-              ctx.beginPath();
-              ctx.ellipse(xx * cw + cw / 2, uy * chh + chh / 2, cw * 0.42, chh * 0.42, 0, 0, Math.PI * 2);
-              ctx.fill();
+              ctx.drawImage(dotSprites!.on, xx * cw + cw * 0.08, uy * chh + chh * 0.08, cw * 0.84, chh * 0.84);
             }
           }
         }
@@ -1351,13 +1372,10 @@ export function FlipdotBoard({ text, books }: { text?: BoardText; books?: BoardB
         const uy = l.row + l.gh * l.scale + 1;
         if (uy >= rows) continue;
         const n = Math.round(l.wCols * l.hoverP);
-        ctx.fillStyle = ON;
         for (let c = 0; c < n; c++) {
           const xx = l.col + c;
           if (xx >= cols) break;
-          ctx.beginPath();
-          ctx.ellipse(xx * cw + cw / 2, uy * chh + chh / 2, cw * 0.42, chh * 0.42, 0, 0, Math.PI * 2);
-          ctx.fill();
+          ctx.drawImage(dotSprites!.on, xx * cw + cw * 0.08, uy * chh + chh * 0.08, cw * 0.84, chh * 0.84);
         }
       }
       raf = requestAnimationFrame(frame);
@@ -1365,6 +1383,12 @@ export function FlipdotBoard({ text, books }: { text?: BoardText; books?: BoardB
 
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "c" || e.key === "C") cursorMode = (cursorMode + 1) % 3;
+      if (e.key === "d" || e.key === "D") {
+        const i = DENSITIES.findIndex((v) => Math.abs(v - density) < 0.01);
+        density = DENSITIES[(i + 1) % DENSITIES.length];
+        resize();
+        console.info(`[board] density ${density}x — ${cols}x${rows} dots`);
+      }
       if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
         const p = currentPage.split(":");
         if (p[0] === "BOOKS" && p[1] === "SHELF") {
