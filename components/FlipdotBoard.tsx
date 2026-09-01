@@ -876,72 +876,15 @@ export function FlipdotBoard({ text, books }: { text?: BoardText; books?: BoardB
       return NAV.includes(up) ? up : "HOME";
     }
 
-    // the freshly composed page's resting target for a cell (dynamic layers —
-    // clock, glider, cyclist — rebuild themselves a tick later and ease in)
-    function pageTarget(i: number): number {
-      const m = textMask![i];
-      if (m >= 2) return 1;
-      if (m === 1) return 0;
-      const sp = slashParam ? slashParam[i] : NaN;
-      if (sp === sp) return slashD![i] < 1 ? 1 : 0;
-      if (cellLum![i] > 0.42) return clockHalo && clockHalo[i] ? 0 : 1;
-      return 0;
-    }
-
-    function beginCoalesce() {
-      if (reduced || !coalDep || !coalArr) return;
-      coalDep.fill(NaN); coalArr.fill(NaN);
-      // dots on both pages stay latched; only the difference moves
-      const srcs: number[] = [], dsts: number[] = [];
-      for (let i = 0; i < cols * rows; i++) {
-        const was = dotV[i] > 0.5, will = pageTarget(i) === 1;
-        if (was && !will) srcs.push(i);
-        else if (!was && will) dsts.push(i);
-      }
-      const pairs = Math.min(srcs.length, dsts.length);
-      const stride = pairs > MAXFLY ? pairs / MAXFLY : 1;
-      if (!coalParts) coalParts = new Float32Array(MAXFLY * 8);
-      coalN = 0;
-      let next = 0;
-      for (let k = 0; k < pairs; k++) {
-        const si = srcs[k], di = dsts[k];
-        const sx = si % cols, sy = (si / cols) | 0;
-        const dx = di % cols, dy = (di / cols) | 0;
-        const h = hash2(sx, sy), h2 = hash2(dx, dy);
-        if (k >= next && coalN < MAXFLY) {
-          next += stride;
-          const d0 = 0.05 + 0.4 * h;
-          const d1 = d0 + 0.3 + 0.2 * h2;
-          coalDep[si] = d0; coalArr[di] = d1;
-          const o = coalN * 8;
-          coalParts[o] = sx; coalParts[o + 1] = sy;
-          coalParts[o + 2] = dx; coalParts[o + 3] = dy;
-          coalParts[o + 4] = d0; coalParts[o + 5] = d1;
-          coalParts[o + 6] = (h - 0.5) * 14; // gentle arc, in dots
-          coalParts[o + 7] = -1;
-          coalN++;
-        } else {
-          // beyond the flight budget: flip off and on in place, staggered
-          coalDep[si] = 0.08 + 0.5 * h;
-          coalArr[di] = 0.35 + 0.55 * h2;
-        }
-      }
-      for (let k = pairs; k < srcs.length; k++)
-        coalDep[srcs[k]] = 0.08 + 0.5 * hash2(srcs[k] % cols, (srcs[k] / cols) | 0);
-      for (let k = pairs; k < dsts.length; k++)
-        coalArr[dsts[k]] = 0.35 + 0.55 * hash2(dsts[k] % cols, (dsts[k] / cols) | 0);
-      coalStart = performance.now() / 1000;
-    }
-
     function navigate(page: string, skipHash?: boolean) {
       if (page === currentPage) return;
       currentPage = page;
       if (!skipHash) {
         try { history.pushState(null, "", hashFor(page)); } catch {}
       }
-      transStart = -1; prevLum = null; prevMask = null; // the sweep is boot's; navs coalesce
+      prevLum = cellLum; prevMask = textMask;
       compose(page);
-      beginCoalesce();
+      if (!reduced) transStart = performance.now() / 1000;
     }
 
     // cached dot sprites: one anti-aliased ellipse rendered once per resize,
@@ -1010,9 +953,6 @@ export function FlipdotBoard({ text, books }: { text?: BoardText; books?: BoardB
       targets = new Uint8Array(cols * rows);
       activeIdx = new Int32Array(cols * rows);
       activeN = 0; trailAlive = false; dirtyTargets = true;
-      coalDep = new Float32Array(cols * rows);
-      coalArr = new Float32Array(cols * rows);
-      coalStart = -1; coalN = 0;
       prevLum = null; prevMask = null; transStart = -1;
       clockMask = new Uint8Array(cols * rows); lastClockKey = "";
       playMask = new Uint8Array(cols * rows); lastPlayKey = "";
@@ -1340,16 +1280,6 @@ export function FlipdotBoard({ text, books }: { text?: BoardText; books?: BoardB
     let activeN = 0;
     let trailAlive = false;
     let dirtyTargets = true;
-    // coalesce: on navigation the old page's dots detach, fly, and latch into
-    // the new page. Flight is grid-snapped — dots flip along the path, the way
-    // a real sign animates. Dots shared by both pages never move at all.
-    const COAL = 1.0; // the whole window (s); flights land by ~0.9
-    const MAXFLY = 4000;
-    let coalStart = -1;
-    let coalDep: Float32Array | null = null; // per-cell departure time (NaN = stays)
-    let coalArr: Float32Array | null = null; // per-cell arrival time (NaN = stays)
-    let coalParts: Float32Array | null = null; // packed: sx,sy,tx,ty,d0,d1,bend,lastCell
-    let coalN = 0;
     const easeInOut = (p: number) => (p < 0.5 ? 2 * p * p : 1 - ((-2 * p + 2) ** 2) / 2);
 
     function frame(ms: number) {
@@ -1363,7 +1293,6 @@ export function FlipdotBoard({ text, books }: { text?: BoardText; books?: BoardB
       if (transStart >= 0) { wake(); dirtyTargets = true; }
       if (!reduced && faceBox) { wake(); dirtyTargets = true; } // shimmer never rests
       if (trailAlive) { wake(); dirtyTargets = true; }
-      if (coalStart >= 0) { wake(); dirtyTargets = true; }
       if (laserOn || laserP > 0.02) wake();
       fdTicks++;
       if (fdTicks % 15 === 0) canvas.dataset.fd = fdDrawn + "/" + fdTicks;
@@ -1373,7 +1302,6 @@ export function FlipdotBoard({ text, books }: { text?: BoardText; books?: BoardB
       const inTrans = transStart >= 0 && t - transStart < TRANS;
       if (transStart >= 0 && !inTrans) { transStart = -1; prevLum = null; prevMask = null; }
       const sweep = inTrans ? easeInOut((t - transStart) / TRANS) * (cols + 10) : 0;
-      const coalT = coalStart >= 0 ? t - coalStart : -1;
 
       ctx.drawImage(staticLayer, 0, 0, W, H);
 
@@ -1435,12 +1363,6 @@ export function FlipdotBoard({ text, books }: { text?: BoardText; books?: BoardB
         if (!reduced && cursorMode === 2 && m === 0 && guideOK && guideOK[i] && mx > -9999 &&
             (x === curCol || y === curRow) && (x + y) % 3 === 0) {
           target = 1;
-        }
-        // coalesce holds: a departing dot stays lit until its particle lifts,
-        // a destination stays dark until its particle lands
-        if (coalT >= 0) {
-          const dep = coalDep![i]; if (dep === dep && coalT < dep) target = 1;
-          const arr = coalArr![i]; if (arr === arr && coalT < arr) target = 0;
         }
         targets[i] = target;
         const pv = dotV[i];
@@ -1514,35 +1436,6 @@ export function FlipdotBoard({ text, books }: { text?: BoardText; books?: BoardB
             x * cw + cw / 2 - cw * 0.42 * sx, y * chh + chh * 0.08, cw * 0.84 * sx, chh * 0.84);
         }
         activeN = w;
-      }
-
-      // the flight layer: dots in transit, snapped to the grid like any flip
-      if (coalT >= 0 && coalParts) {
-        for (let k = 0; k < coalN; k++) {
-          const o = k * 8;
-          const d0 = coalParts[o + 4], d1 = coalParts[o + 5];
-          if (coalT < d0 || coalT >= d1) continue;
-          const q = easeInOut((coalT - d0) / (d1 - d0));
-          const px = coalParts[o] + (coalParts[o + 2] - coalParts[o]) * q;
-          const py = coalParts[o + 1] + (coalParts[o + 3] - coalParts[o + 1]) * q;
-          // a gentle arc perpendicular to the flight line, widest mid-flight
-          const nx = -(coalParts[o + 3] - coalParts[o + 1]);
-          const ny = coalParts[o + 2] - coalParts[o];
-          const nl = Math.hypot(nx, ny) || 1;
-          const bend = coalParts[o + 6] * Math.sin(Math.PI * q);
-          const cx = Math.round(px + (nx / nl) * bend);
-          const cy = Math.round(py + (ny / nl) * bend);
-          if (cx < 0 || cx >= cols || cy < 0 || cy >= rows) continue;
-          const cell = cy * cols + cx;
-          if (cell !== coalParts[o + 7]) {
-            // the cell it just left cools — a faint comet trail via the afterglow
-            const last = coalParts[o + 7];
-            if (last >= 0 && !reduced && heat[last | 0] < 0.3) heat[last | 0] = 0.3;
-            coalParts[o + 7] = cell;
-          }
-          ctx.drawImage(dotSprites!.on, cx * cw + cw * 0.08, cy * chh + chh * 0.08, cw * 0.84, chh * 0.84);
-        }
-        if (coalT > COAL) coalStart = -1;
       }
 
       // laser eyes overlay: the one sanctioned red, and only while the meme is on
