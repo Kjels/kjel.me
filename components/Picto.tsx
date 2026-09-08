@@ -5,8 +5,8 @@ import { Board } from "./board/engine";
 import { PICTOS } from "./board/pictos";
 
 // One project's pictogram: standalone dots on a small board with no grid.
-// Slow at rest, full speed while hovered or focused (the parent sets data-live).
-export function Picto({ slug, pitch = 8, className }: { slug: string; pitch?: number; className?: string }) {
+// Steps a little faster while hovered or focused.
+export function Picto({ slug, pitch = 12, className }: { slug: string; pitch?: number; className?: string }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const hostRef = useRef<HTMLDivElement>(null);
 
@@ -27,7 +27,7 @@ export function Picto({ slug, pitch = 8, className }: { slug: string; pitch?: nu
         const dt = last < 0 ? 0 : Math.min(0.1, t - last);
         last = t;
         const live = host.matches(":hover, :focus-within") || host.dataset.live !== undefined;
-        clock += dt * (b.reduced ? 0 : live ? 1 : 0.28);
+        clock += dt * (b.reduced ? 0 : live ? 1.6 : 1);
         const L = b.layers[0] ?? b.layer();
         L.mask.fill(0);
         picto(b, L, clock);

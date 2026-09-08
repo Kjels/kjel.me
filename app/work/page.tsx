@@ -1,13 +1,13 @@
 import Link from "next/link";
 import { PROJECTS, VERB } from "@/content/work";
-import { fetchRoadmap, fetchRepo, fetchCommitCount, stamp, gen } from "@/lib/github";
+import { fetchRoadmap, fetchRepo, fetchCommitCount, gen } from "@/lib/github";
 import { Picto } from "@/components/Picto";
 import { TickRule } from "@/components/TickRule";
 
 export const metadata = { title: "kjel.me / work" };
 export const revalidate = 3600;
 
-// The ledger: one sheet, one cell per project, in the asset book's idiom.
+// The ledger. Full width, one row per project, hairlines between.
 export default async function Work() {
   const rows = await Promise.all(
     PROJECTS.map(async (p) => {
@@ -17,40 +17,31 @@ export default async function Work() {
       return { p, roadmap, repo, commits };
     }),
   );
-  const latest = rows.map((r) => r.repo?.pushedAt).filter(Boolean).sort().at(-1);
   return (
-    <div className="sheet">
-      <i className="reg tl" aria-hidden /><i className="reg tr" aria-hidden /><i className="reg bl" aria-hidden /><i className="reg br" aria-hidden />
-      <header className="title">
-        <h1>Work <span>·</span> Ledger</h1>
-        <p>Vol. 01 <span>·</span> {String(rows.length).padStart(2, "0")} entries{latest && <> <span>·</span> {stamp(latest)}</>}</p>
-      </header>
-      <ol className="cells">
-        {rows.map(({ p, roadmap, repo, commits }, i) => (
-          <li key={p.slug} className="cell">
-            <Link href={`/work/${p.slug}`} className="cell-link">
-              <Picto slug={p.slug} className="cell-picto" />
-              <span className="cell-strip">
-                <span className="cell-no">{String(i + 1).padStart(2, "0")}</span>
-                <span className="cell-name">{p.title}</span>
-                <span className="cell-verb">{VERB[p.status]}</span>
+    <div className="ledger">
+      <h1 className="sr-only">Work</h1>
+      <div className="row head" aria-hidden>
+        <span className="c-picto" /><span className="c-no">No.</span><span className="c-name">Entry</span>
+        <span className="c-state">State</span><span className="c-since">Since</span><span className="c-gen">Gen</span><span className="c-tick">Roadmap</span>
+      </div>
+      <ol className="rows">
+        {rows.map(({ p, roadmap, commits }, i) => (
+          <li key={p.slug}>
+            <Link href={`/work/${p.slug}`} className="row">
+              <Picto slug={p.slug} className="c-picto" />
+              <span className="c-no">{String(i + 1).padStart(2, "0")}</span>
+              <span className="c-name">
+                <span className="name">{p.title}</span>
+                <span className="blurb">{p.blurb}</span>
               </span>
-              <span className="cell-body">
-                <span className="cell-blurb">{p.blurb}</span>
-                <span className="cell-data">
-                  {commits != null && <span>{gen(commits)}</span>}
-                  {repo && <span>{stamp(repo.pushedAt)}</span>}
-                  {roadmap && roadmap.total > 0 && <TickRule done={roadmap.done} total={roadmap.total} />}
-                </span>
-              </span>
+              <span className="c-state">{VERB[p.status]}</span>
+              <span className="c-since">{p.started}</span>
+              <span className="c-gen">{commits != null ? gen(commits) : ""}</span>
+              <span className="c-tick">{roadmap && roadmap.total > 0 ? <TickRule done={roadmap.done} total={roadmap.total} /> : null}</span>
             </Link>
           </li>
         ))}
       </ol>
-      <footer className="title foot">
-        <p>Cells live <span>·</span> cells die <span>·</span> the grid remains</p>
-        <p>Sheet 01 / 01</p>
-      </footer>
     </div>
   );
 }
