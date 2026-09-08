@@ -1,13 +1,28 @@
-// The kjel.me scene: what the board actually shows. Menu, home with the mark
-// and portrait, text pages, the clock + role + now-playing layer, the cyclist
-// and the glider, and the laser eyes. The engine knows none of this.
+// The kjel.me scene: what the board actually shows. Two compositions: HOME,
+// the full landing with the mark, the portrait, the intro, the clock and the
+// cyclist; and STRIP, the masthead over every HTML page. Plus the layers
+// that move: clock and role, now-playing, the cyclist, the laser eyes.
+// The engine knows none of this.
 
 import type { BoardText } from "@/lib/board-text";
 import { Board, type Layer, type LinkRec } from "../engine";
-import { DS, measureCols, measureM, wrap, wrapM, fit } from "../font";
+import { DS, measureCols, measureM, wrapM, fit } from "../font";
 import { loadPortrait } from "../portrait";
 
-export const NAV = ["WORK", "NOW", "ABOUT", "NOTES"];
+/** the sections, in menu order; each is an HTML route */
+export const NAV = ["WORK", "ABOUT"];
+export const ROUTES: Record<string, string> = { HOME: "/", WORK: "/work", ABOUT: "/about" };
+/** the masthead: grid height in dots and CSS height in px (keep --strip-h in globals.css equal) */
+export const STRIP_ROWS = 11;
+export const STRIP_H = 60;
+
+/** which menu word a pathname belongs to, "" for none */
+export function sectionFor(path: string) {
+  const seg = "/" + (path.split("/")[1] || "");
+  for (const [name, route] of Object.entries(ROUTES)) if (route !== "/" && route === seg) return name;
+  return "";
+}
+
 const DAYS = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
 const MONTHS = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
 
@@ -15,7 +30,6 @@ const MONTHS = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "
 const EYES: [number, number][] = [[0.386, 0.276], [0.55, 0.274]];
 
 export function createKjelScene(TXT: BoardText) {
-  const PAGES = TXT.pages;
   const ROLES = TXT.roles; // sequential, never random: a first visit reads the sane ones first
   const external: Record<string, string> = { LINKEDIN: TXT.linkedin, EMAIL: TXT.email };
 
@@ -148,29 +162,31 @@ export function createKjelScene(TXT: BoardText) {
 
   /* ---------- the clock + the role line, one dynamic layer ---------- */
   let clock: Layer | null = null;
+  let current = "HOME"; // what compose last drew: HOME or STRIP:<section>
 
   function updateClock(b: Board, t: number) {
     const L = (clock ??= b.layer());
-    const { cols, rows, wide, reduced, page } = b;
+    const { cols, rows, wide, reduced } = b;
+    const home = current === "HOME";
     const fi = reduced ? 0 : Math.floor(t / 2.8) % ROLES.length;
-    const key = page + "|" + ((Date.now() / 1000) | 0) + "|" + fi + "|" + nowTitle;
+    const key = current + "|" + ((Date.now() / 1000) | 0) + "|" + fi + "|" + nowTitle;
     if (key === L.key) return;
     L.key = key;
     L.mask.fill(0);
     const d = new Date();
     const hh = d.getHours(), mm = d.getMinutes(), ss = d.getSeconds();
     const hhs = String(hh).padStart(2, "0"), mms = String(mm).padStart(2, "0");
-    if (page !== "HOME") {
+    if (!home) {
       clearNowHot(b); // the announcement lives on home only
-      // the board keeps its heartbeat on subpages
-      if (!wide) { L.halo = null; return; }
-      const r2 = Math.round(cols * 0.94);
-      const mmX = r2 - measureCols(mms);
-      b.stampInto(L.mask, mms, mmX, rows - 13, 1);
-      const cX = mmX - 3;
-      if (reduced || ss % 2 === 0) b.stampInto(L.mask, ":", cX, rows - 13, 1);
-      b.stampInto(L.mask, hhs, cX - 2 - measureCols(hhs), rows - 13, 1);
-      b.haloOf(L);
+      // the strip: a small clock, centered, colon beating
+      const row = Math.round((rows - 5) / 2);
+      const w = measureM(hhs) + 2 + measureM(":") + 2 + measureM(mms);
+      let x = Math.round((cols - w) / 2);
+      b.stampInto(L.mask, hhs, x, row, 1, true); x += measureM(hhs) + 2;
+      if (reduced || ss % 2 === 0) b.stampInto(L.mask, ":", x, row, 1, true);
+      x += measureM(":") + 2;
+      b.stampInto(L.mask, mms, x, row, 1, true);
+      L.halo = null;
       return;
     }
     const dateStr = DAYS[d.getDay()] + " " + String(d.getDate()).padStart(2, "0") + " " + MONTHS[d.getMonth()];
@@ -205,55 +221,19 @@ export function createKjelScene(TXT: BoardText) {
     b.haloOf(L);
   }
 
-  /* ---------- the resident layer: a glider on subpages, the cyclist lapping home ---------- */
+  /* ---------- the cyclist lapping the bottom of home ---------- */
   let play: Layer | null = null;
-  // the colophon: a lone glider walking a small torus beside the title on subpages
-  let colA: Uint8Array | null = null, colGen = 0, colSeed = "";
 
   function updatePlay(b: Board, t: number) {
     const L = (play ??= b.layer());
-    const { cols, rows, wide, reduced, page } = b;
+    const { cols, rows, wide, reduced } = b;
     const pm = L.mask;
-    if (page !== "HOME" && wide && !reduced) {
-      const G = 9;
-      const gen = Math.floor(t / 1.4);
-      const key = "col|" + page + "|" + gen;
-      if (key === L.key) return;
-      L.key = key;
-      pm.fill(0);
-      if (!colA || colSeed !== page) {
-        colA = new Uint8Array(G * G);
-        for (let y = 0; y < 3; y++) for (let x = 0; x < 3; x++)
-          if (DS.GLIDER[y][x] === "1") colA[(y + 1) * G + (x + 1)] = 1;
-        colSeed = page; colGen = gen;
-      }
-      while (colGen < gen) {
-        const cur: Uint8Array = colA!;
-        const nb = new Uint8Array(G * G);
-        for (let y = 0; y < G; y++) for (let x = 0; x < G; x++) {
-          let c = 0;
-          for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
-            if (!dx && !dy) continue;
-            c += cur[((y + dy + G) % G) * G + ((x + dx + G) % G)];
-          }
-          nb[y * G + x] = (cur[y * G + x] ? c === 2 || c === 3 : c === 3) ? 1 : 0;
-        }
-        colA = nb; colGen++;
-      }
-      const ox = Math.round(cols * 0.94) - G, oy = Math.round(rows * 0.13);
-      for (let y = 0; y < G; y++) for (let x = 0; x < G; x++)
-        if (colA![y * G + x]) {
-          const xx = ox + x, yy = oy + y;
-          if (xx >= 0 && xx < cols && yy >= 0 && yy < rows) pm[yy * cols + xx] = 1;
-        }
-      return;
-    }
-    const on = page === "HOME" && wide && !reduced;
+    const on = current === "HOME" && wide && !reduced;
     if (!on) {
       if (L.key !== "off") { L.key = "off"; pm.fill(0); }
       return;
     }
-    // the cyclist: endless laps along the bottom edge, passing behind the text;
+    // endless laps along the bottom edge, passing behind the text;
     // phase-shifted so he's already riding in as the board boots
     const lap = cols + 48;
     const xo = (Math.floor(t * 8.5) + 30) % lap - 38;
@@ -309,143 +289,91 @@ export function createKjelScene(TXT: BoardText) {
     }
   }
 
-  /* ---------- pages ---------- */
+  /* ---------- compositions ---------- */
 
-  function compose(b: Board, page: string) {
+  function composeHome(b: Board) {
     const { cols, rows, W, H, cw, chh, wide } = b;
-    b.fx = laser;
-    if (page !== "HOME") { laser.on = false; laser.p = 0; laser.mask = null; }
-
     if (wide) {
       const colL = Math.round(cols * 0.06);
       const right = Math.round(cols * 0.94);
-      const titleTop = Math.round(rows * 0.13);
-      const contentTop = titleTop + 27;
-      // the menu lives on the top line of every page; a lit block marks the current page,
-      // so the sliding underline belongs to hover alone
+      // the menu on the top line; each word leaves the board for its page
       {
         const gap = 6;
         const total = NAV.reduce((s, w) => s + measureM(w) + gap, 0) - gap;
         let nx = right - total;
-        const menuRow = nx < colL + 23 ? 12 : 3; // drop below KJEL. if the board is narrow
         for (const wd of NAV) {
-          if (wd === page) { b.marker(nx - 4, menuRow + 1); b.stamp(wd, nx, menuRow, 1, undefined, true); }
-          else b.stamp(wd, nx, menuRow, 1, wd, true);
+          b.stamp(wd, nx, 3, 1, wd, true);
           nx += measureM(wd) + gap;
         }
       }
-      if (page === "HOME") {
-        const cap = Math.min(H * 0.26, (W * 0.5) / 2.9);
-        b.drawMark(cap, colL * cw, H * 0.4);
-        if (portrait) {
-          // the portrait holds the upper-right
-          b.drawFace(portrait, W * 0.785, H * 0.375, 0.56);
-          const fb = b.faceBox!;
-          // click the portrait: the eyes go laser (a dot-board rendition of the meme)
-          b.hotAt(fb.x0 * cw, fb.y0 * chh, (fb.x1 - fb.x0) * cw, (fb.y1 - fb.y0) * chh,
-            "portrait", () => { laser.on = !laser.on; if (laser.on) buildLaser(b); });
-          if (laser.on) buildLaser(b);
-        }
-        // an honest introduction, in the small face; it stays clear of the portrait
-        const faceLeft = b.faceBox ? Math.floor(b.faceBox.x0) : cols;
-        const mIntro = Math.min(Math.round(cols * 0.7), faceLeft - colL - 4);
-        let irow = Math.round(rows * 0.5);
-        for (const para of TXT.home) {
-          for (const line of wrapM(para, mIntro)) {
-            if (irow + 5 > rows - 24) break;
-            b.stamp(line, colL, irow, 1, undefined, true);
-            irow += 8;
-          }
-          irow += 4;
-        }
-      } else {
-        b.stamp("KJEL.", colL, 3, 1, "HOME", true);
-        b.stamp(page, colL, titleTop, 2, undefined, false, true); // the page word, quietly underlined
+      const cap = Math.min(H * 0.26, (W * 0.5) / 2.9);
+      b.drawMark(cap, colL * cw, H * 0.4);
+      if (portrait) {
+        // the portrait holds the upper-right
+        b.drawFace(portrait, W * 0.785, H * 0.375, 0.56);
+        const fb = b.faceBox!;
+        // click the portrait: the eyes go laser (a dot-board rendition of the meme)
+        b.hotAt(fb.x0 * cw, fb.y0 * chh, (fb.x1 - fb.x0) * cw, (fb.y1 - fb.y0) * chh,
+          "portrait", () => { laser.on = !laser.on; if (laser.on) buildLaser(b); });
+        if (laser.on) buildLaser(b);
       }
-      // the house column: single left datum; the sides stay free
-      const contentCol = colL;
-      const measure = Math.round(cols * 0.55);
-      const flow = (lines: string[], m?: number, stop?: number, bullets?: boolean) => {
-        let crow = contentTop;
-        const lim = stop || rows - 16;
-        let head = true; // the first line of each item takes the strike bullet
-        for (const raw of lines) {
-          if (!raw) { crow += 9; head = true; continue; }
-          for (const line of wrap(raw, 1, m || measure)) {
-            if (crow + 7 > lim) return crow;
-            if (bullets && head) { b.stampG(DS.SOLIDUS, contentCol, crow); head = false; }
-            b.stamp(line, bullets ? contentCol + 8 : contentCol, crow, 1);
-            crow += 9;
-          }
+      // an honest introduction, in the small face; it stays clear of the portrait
+      const faceLeft = b.faceBox ? Math.floor(b.faceBox.x0) : cols;
+      const mIntro = Math.min(Math.round(cols * 0.7), faceLeft - colL - 4);
+      let irow = Math.round(rows * 0.5);
+      for (const para of TXT.home) {
+        for (const line of wrapM(para, mIntro)) {
+          if (irow + 5 > rows - 24) break;
+          b.stamp(line, colL, irow, 1, undefined, true);
+          irow += 8;
         }
-        return crow;
-      };
-      if (page === "ABOUT") {
-        // place + contact anchor the lower-left corner
-        b.stamp(TXT.place, colL, rows - 19, 1);
-        b.stamp("LINKEDIN", colL, rows - 10, 1, "LINKEDIN", true, true);
-        b.stamp("EMAIL", colL + measureM("LINKEDIN") + 6, rows - 10, 1, "EMAIL", true, true);
-        flow(TXT.about, measure, rows - 21);
-      } else if (page !== "HOME") {
-        const end = flow(PAGES[page] || [], undefined, undefined, page === "WORK");
-        if (page === "NOTES") b.stampSmiley(contentCol + 14, end + 20, 13, true);
+        irow += 4;
       }
     } else {
       const colL = 3;
-      // menu on top, wrapped in fixed slots; a lit block marks the current page
+      // menu on top, wrapped in fixed slots
       let nx = colL, ny = 13;
       for (const wd of NAV) {
         const wc = measureM(wd);
         if (nx + wc > cols - 3) { nx = colL; ny += 9; }
-        if (wd === page) { b.marker(Math.max(0, nx - 4), ny + 1); b.stamp(wd, nx, ny, 1, undefined, true); }
-        else b.stamp(wd, nx, ny, 1, wd, true);
+        b.stamp(wd, nx, ny, 1, wd, true);
         nx += wc + 6;
       }
       const titleTop = ny + 14;
-      const contentTop = titleTop + 21; // title cap + one body cap of air
-      if (page === "HOME") {
-        const cap = Math.min(H * 0.14, (W * 0.88) / 2.9);
-        b.drawMark(cap, colL * cw, (titleTop + 21) * chh);
-        let irow = titleTop + 41;
-        for (const para of TXT.homeNarrow) {
-          for (const line of wrapM(para, cols - colL * 2)) {
-            b.stamp(line, colL, irow, 1, undefined, true);
-            irow += 8;
-          }
-          irow += 4;
+      const cap = Math.min(H * 0.14, (W * 0.88) / 2.9);
+      b.drawMark(cap, colL * cw, (titleTop + 21) * chh);
+      let irow = titleTop + 41;
+      for (const para of TXT.homeNarrow) {
+        for (const line of wrapM(para, cols - colL * 2)) {
+          b.stamp(line, colL, irow, 1, undefined, true);
+          irow += 8;
         }
-      } else {
-        b.stamp("KJEL.", colL, 3, 1, "HOME", true);
-        b.stamp(page, colL, titleTop, 2, undefined, false, true);
-      }
-      if (page === "ABOUT") {
-        const linksRow = rows - 10, placeRow = rows - 19;
-        let crow = contentTop;
-        for (const line of TXT.aboutNarrow) {
-          if (!line) { crow += 9; continue; }
-          if (crow + 7 > placeRow - 2) break;
-          b.stamp(line, colL, crow, 1);
-          crow += 9;
-        }
-        b.stamp(TXT.placeNarrow, colL, placeRow, 1);
-        b.stamp("LINKEDIN", colL, linksRow, 1, "LINKEDIN", true, true);
-        b.stamp("EMAIL", colL + measureM("LINKEDIN") + 6, linksRow, 1, "EMAIL", true, true);
-      } else if (page !== "HOME") {
-        let crow = contentTop;
-        let head = true;
-        const bullets = page === "WORK";
-        for (const raw of PAGES[page] || []) {
-          if (!raw) { crow += 9; head = true; continue; }
-          for (const line of wrap(raw, 1, cols - colL * 2 - (bullets ? 8 : 0))) {
-            if (crow + 7 > rows - 6) break;
-            if (bullets && head) { b.stampG(DS.SOLIDUS, colL, crow); head = false; }
-            b.stamp(line, bullets ? colL + 8 : colL, crow, 1);
-            crow += 9;
-          }
-        }
-        if (page === "NOTES" && crow + 30 < rows - 6) b.stampSmiley(colL + 12, crow + 16, 11, true);
+        irow += 4;
       }
     }
+  }
+
+  // the masthead: mark left, menu right, clock in the middle (from the layer)
+  function composeStrip(b: Board, section: string) {
+    const { cols, rows } = b;
+    const row = Math.round((rows - 5) / 2);
+    b.stamp("KJEL.", 3, row, 1, "HOME", true);
+    const gap = 6;
+    const total = NAV.reduce((s, w) => s + measureM(w) + gap, 0) - gap;
+    let nx = cols - 3 - total;
+    for (const wd of NAV) {
+      if (wd === section) { b.marker(nx - 4, row + 1); b.stamp(wd, nx, row, 1, undefined, true); }
+      else b.stamp(wd, nx, row, 1, wd, true);
+      nx += measureM(wd) + gap;
+    }
+  }
+
+  function compose(b: Board, page: string) {
+    current = page;
+    b.fx = laser;
+    if (page !== "HOME") { laser.on = false; laser.p = 0; laser.mask = null; }
+    if (page === "HOME") composeHome(b);
+    else composeStrip(b, page.split(":")[1] || "");
   }
 
   function tick(b: Board, t: number) {
@@ -467,14 +395,4 @@ export function createKjelScene(TXT: BoardText) {
   }
 
   return { compose, tick, load, destroy, external, rows: (W: number, H: number) => (W / H > 1.05 ? 141 : 153) };
-}
-
-export const hashFor = (page: string) => (page === "HOME" ? "#" : "#" + page.toLowerCase());
-
-export function pageFromHash(): string {
-  let h = "";
-  try { h = decodeURIComponent(location.hash.slice(1)).toLowerCase(); } catch { h = location.hash.slice(1).toLowerCase(); }
-  if (!h) return "HOME";
-  const up = h.toUpperCase();
-  return NAV.includes(up) ? up : "HOME";
 }

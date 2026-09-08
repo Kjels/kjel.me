@@ -30,6 +30,10 @@ export type BoardOptions = {
   onNavigate?: (page: string) => void;
   /** link names that leave the board, e.g. EMAIL → mailto: */
   external?: Record<string, string>;
+  /** link names that leave the board for another route, e.g. WORK → /work */
+  routes?: Record<string, string>;
+  /** called when a routed link is clicked; the shell wipes the board and navigates */
+  onRoute?: (path: string) => void;
   reduced?: boolean;
   page?: string;
 };
@@ -64,6 +68,8 @@ export class Board {
 
   page: string;
   private transStart = -1;
+  /** true between wipeOut() and the next compose(): all dots off, layers muted */
+  private blank = false;
 
   /** the mark's slash: a lit core with a dark channel, cut through everything */
   slashLine: Line | null = null;
@@ -180,10 +186,12 @@ export class Board {
       const rec: LinkRec = { page: link, col, row, scale, wCols, gh, hover: false, hoverP: 0 };
       this.links.push(rec);
       const ext = this.opts.external?.[link];
+      const route = this.opts.routes?.[link];
+      const fn = ext ? undefined : route ? () => this.opts.onRoute?.(route) : () => this.navigate(link);
       // hot areas never dip below the 44px touch minimum, centered on the glyphs
       const hw = Math.max(44, wCols * cw + 12), hh2 = Math.max(44, gh * scale * chh + 12);
       const a = this.hotAt(col * cw + (wCols * cw) / 2 - hw / 2, row * chh + (gh * scale * chh) / 2 - hh2 / 2, hw, hh2,
-        link.toLowerCase(), ext ? undefined : () => this.navigate(link), ext);
+        link.toLowerCase(), fn, ext || route);
       if (ext && !ext.startsWith("mailto:")) { a.target = "_blank"; a.rel = "noreferrer"; }
       a.addEventListener("mouseenter", () => { rec.hover = true; });
       a.addEventListener("mouseleave", () => { rec.hover = false; });
@@ -308,6 +316,7 @@ export class Board {
     this.links = [];
     this.textMask = new Uint8Array(cols * rows);
     this.slashLine = null; this.faceBox = null;
+    this.blank = false;
 
     this.opts.compose(this, page);
 
@@ -361,6 +370,29 @@ export class Board {
     if (!this.reduced) this.transStart = performance.now() / 1000;
   }
 
+  /** sweep every dot off and mute the layers; resolves when the wipe is done */
+  wipeOut(): Promise<void> {
+    return new Promise((res) => {
+      const n = this.cols * this.rows;
+      this.blank = true;
+      this.hots.innerHTML = "";
+      this.links = []; this.extraLinks = [];
+      for (const l of this.layers) { l.mask.fill(0); l.halo = null; l.key = ""; }
+      if (this.reduced) { this.cellLum = new Float32Array(n); this.textMask = new Uint8Array(n); this.slashParam = null; this.faceBox = null; res(); return; }
+      this.prevLum = this.cellLum; this.prevMask = this.textMask;
+      this.cellLum = new Float32Array(n); this.textMask = new Uint8Array(n);
+      this.slashParam = null; this.faceBox = null;
+      this.transStart = performance.now() / 1000;
+      window.setTimeout(res, TRANS * 1000);
+    });
+  }
+
+  /** swap the row function (a different board shape) and rebuild */
+  reshape(rows: (W: number, H: number) => number) {
+    this.opts.rows = rows;
+    this.resize();
+  }
+
   /** deal the whole board in from dark with one wipe */
   boot() {
     if (this.reduced) return;
@@ -383,7 +415,8 @@ export class Board {
     }
   }
 
-  resize() {
+  /** read the canvas rect and rebuild the grid, arrays and off-dot layer for it */
+  private fit() {
     const rect = this.canvas.getBoundingClientRect();
     this.W = Math.max(1, Math.round(rect.width || window.innerWidth));
     this.H = Math.max(1, Math.round(rect.height || window.innerHeight));
@@ -393,7 +426,7 @@ export class Board {
     // one fixed resolution per orientation, like a real sign: the row count is
     // constant and the dot size fluid, so the composition reads identically on
     // every screen. cols follow the aspect ratio to keep the dots round.
-    this.rows = this.opts.rows(W, H);
+    this.rows = Math.max(1, this.opts.rows(W, H));
     this.cols = Math.max(8, Math.round(this.rows * (W / H)));
     this.cw = W / this.cols; this.chh = H / this.rows;
     let K = Math.min(1, 1100 / Math.max(W, H));
@@ -407,7 +440,27 @@ export class Board {
     this.prevLum = null; this.prevMask = null; this.transStart = -1;
     for (const l of this.layers) { l.mask = new Uint8Array(n); l.halo = null; l.key = ""; }
     this.buildOffLayer();
+  }
+
+  resize() {
+    this.fit();
     this.compose(this.page);
+  }
+
+  /**
+   * While the canvas is animating between shapes: refit the grid to the
+   * current rect and keep every dot off. Cheap enough to run per frame.
+   */
+  blankResize() {
+    this.fit();
+    const n = this.cols * this.rows;
+    this.cellLum = new Float32Array(n); this.textMask = new Uint8Array(n);
+    this.slashParam = null; this.faceBox = null;
+    this.hots.innerHTML = ""; this.links = []; this.extraLinks = [];
+    this.blank = true;
+    // resizing the backing store cleared the canvas; show the off grid now
+    // rather than waiting a frame, so the sign never flashes flat
+    this.ctx.drawImage(this.offLayer, 0, 0, this.W, this.H);
   }
 
   start() {
@@ -425,7 +478,7 @@ export class Board {
   private frame = (ms: number) => {
     const t = ms / 1000;
     const { ctx, cols, rows, cw, chh, W, H, reduced } = this;
-    this.opts.tick?.(this, t);
+    if (!this.blank) this.opts.tick?.(this, t);
 
     const inTrans = this.transStart >= 0 && t - this.transStart < TRANS;
     if (this.transStart >= 0 && !inTrans) { this.transStart = -1; this.prevLum = null; this.prevMask = null; }
