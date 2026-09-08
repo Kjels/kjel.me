@@ -241,11 +241,6 @@ export function FlipdotBoard({ text, books }: { text?: BoardText; books?: BoardB
     const src = document.createElement("canvas");
     const sctx = src.getContext("2d", { willReadFrequently: true })!;
     const offLayer = document.createElement("canvas");
-    // the latched image: every dot that has landed lives here, stamped once.
-    // Frames blit this and draw only the dots still in motion — the canvas
-    // equivalent of a flip-dot's magnetic latch.
-    const staticLayer = document.createElement("canvas");
-    let stx: CanvasRenderingContext2D | null = null;
 
     let W = 0, H = 0, SW = 0, SH = 0, K = 1;
     let cols = 0, rows = 0, cw = 0, chh = 0;
@@ -318,10 +313,10 @@ export function FlipdotBoard({ text, books }: { text?: BoardText; books?: BoardB
         if (!ext) {
           a.addEventListener("click", (e) => { e.preventDefault(); navigate(link); });
         }
-        a.addEventListener("mouseenter", () => { rec.hover = true; wake(); });
-        a.addEventListener("mouseleave", () => { rec.hover = false; wake(); });
-        a.addEventListener("focus", () => { rec.hover = true; wake(); });
-        a.addEventListener("blur", () => { rec.hover = false; wake(); });
+        a.addEventListener("mouseenter", () => { rec.hover = true; });
+        a.addEventListener("mouseleave", () => { rec.hover = false; });
+        a.addEventListener("focus", () => { rec.hover = true; });
+        a.addEventListener("blur", () => { rec.hover = false; });
         hots.appendChild(a);
       }
       return wCols;
@@ -850,8 +845,6 @@ export function FlipdotBoard({ text, books }: { text?: BoardText; books?: BoardB
       }
       guideOK = new Uint8Array(cols * rows);
       for (let i = 0; i < cols * rows; i++) guideOK[i] = content[i] ? 0 : 1;
-      wake(); // a fresh composition always earns frames to flip in
-      dirtyTargets = true;
     }
 
     const hashFor = (page: string) => {
@@ -914,20 +907,6 @@ export function FlipdotBoard({ text, books }: { text?: BoardText; books?: BoardB
       for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) {
         octx.drawImage(dotSprites!.off, x * cw + cw * 0.08, y * chh + chh * 0.08, cw * 0.84, chh * 0.84);
       }
-      staticLayer.width = offLayer.width; staticLayer.height = offLayer.height;
-      stx = staticLayer.getContext("2d")!;
-      stx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      stx.drawImage(offLayer, 0, 0, W, H);
-    }
-
-    // a dot lands: stamp its final state into the latched image (exact cell
-    // rect — no bleed, so neighbors in the static layer are never nicked)
-    function stampStatic(x: number, y: number, on: boolean) {
-      if (!stx) return;
-      stx.fillStyle = BG;
-      stx.fillRect(x * cw, y * chh, cw, chh);
-      stx.drawImage(on ? dotSprites!.on : dotSprites!.off,
-        x * cw + cw * 0.08, y * chh + chh * 0.08, cw * 0.84, chh * 0.84);
     }
 
     function resize() {
@@ -950,9 +929,6 @@ export function FlipdotBoard({ text, books }: { text?: BoardText; books?: BoardB
       dotV = new Float32Array(cols * rows).fill(0);
       heat = new Float32Array(cols * rows);
       trailV = new Float32Array(cols * rows);
-      targets = new Uint8Array(cols * rows);
-      activeIdx = new Int32Array(cols * rows);
-      activeN = 0; trailAlive = false; dirtyTargets = true;
       prevLum = null; prevMask = null; transStart = -1;
       clockMask = new Uint8Array(cols * rows); lastClockKey = "";
       playMask = new Uint8Array(cols * rows); lastPlayKey = "";
@@ -1077,8 +1053,8 @@ export function FlipdotBoard({ text, books }: { text?: BoardText; books?: BoardB
           nowHot.className = "fd-hot";
           nowHot.target = "_blank"; nowHot.rel = "noreferrer";
           nowHot.setAttribute("aria-label", "open the song on spotify");
-          nowHot.addEventListener("mouseenter", () => { if (nowLink) { nowLink.hover = true; wake(); } });
-          nowHot.addEventListener("mouseleave", () => { if (nowLink) { nowLink.hover = false; wake(); } });
+          nowHot.addEventListener("mouseenter", () => { if (nowLink) nowLink.hover = true; });
+          nowHot.addEventListener("mouseleave", () => { if (nowLink) nowLink.hover = false; });
           hots.appendChild(nowHot);
         }
         nowHot.href = nowUrl;
@@ -1264,50 +1240,20 @@ export function FlipdotBoard({ text, books }: { text?: BoardText; books?: BoardB
     let trailV: Float32Array | null = null;
     let heat = new Float32Array(0);
     let raf = 0;
-    // bistability: a real flip-dot board is magnetically latched — it holds its
-    // image for free and only spends energy flipping. Same here: the loop draws
-    // only while something is in motion; at rest the canvas simply holds. The
-    // clock's second-blink wakes it briefly each second; wake() buys frames.
-    let awake = 30;
-    const wake = () => { awake = 2; };
-    let fdTicks = 0, fdDrawn = 0; // debug counters: canvas data-fd = drawn/ticks
-    // target cache + active list: steady frames touch only the dots in motion.
-    // Anything that can change a dot's target (compose, clock/play tick, wipe,
-    // shimmer, cursor, trail) marks targets dirty and forces one full scan —
-    // and the clock dirties every second anyway, so staleness self-heals fast.
-    let targets = new Uint8Array(0);
-    let activeIdx = new Int32Array(0);
-    let activeN = 0;
-    let trailAlive = false;
-    let dirtyTargets = true;
     const easeInOut = (p: number) => (p < 0.5 ? 2 * p * p : 1 - ((-2 * p + 2) ** 2) / 2);
 
     function frame(ms: number) {
       const t = ms / 1000;
-      const ck = lastClockKey, pk = lastPlayKey;
       updateClock(t);
       updatePlay(t);
-      // anything that changed state this tick keeps the board awake; anything
-      // that can move a dot's target also invalidates the target cache
-      if (ck !== lastClockKey || pk !== lastPlayKey) { wake(); dirtyTargets = true; }
-      if (transStart >= 0) { wake(); dirtyTargets = true; }
-      if (!reduced && faceBox) { wake(); dirtyTargets = true; } // shimmer never rests
-      if (trailAlive) { wake(); dirtyTargets = true; }
-      if (laserOn || laserP > 0.02) wake();
-      fdTicks++;
-      if (fdTicks % 15 === 0) canvas.dataset.fd = fdDrawn + "/" + fdTicks;
-      if (awake <= 0) { raf = requestAnimationFrame(frame); return; }
-      awake--; fdDrawn++;
-      let motion = false;
       const inTrans = transStart >= 0 && t - transStart < TRANS;
       if (transStart >= 0 && !inTrans) { transStart = -1; prevLum = null; prevMask = null; }
       const sweep = inTrans ? easeInOut((t - transStart) / TRANS) * (cols + 10) : 0;
 
-      ctx.drawImage(staticLayer, 0, 0, W, H);
+      ctx.drawImage(offLayer, 0, 0, W, H);
 
       const curCol = Math.floor(mx / cw), curRow = Math.floor(my / chh);
-      const fullScan = dirtyTargets;
-      if (fullScan && !reduced && cursorMode === 1 && trailV && mx > -9999) {
+      if (!reduced && cursorMode === 1 && trailV && mx > -9999) {
         if (Math.hypot(mx - pmx, my - pmy) > 300 || pmx < -9999) { pmx = mx; pmy = my; }
         const x0 = pmx / cw, y0 = pmy / chh, x1 = mx / cw, y1 = my / chh;
         const steps = Math.min(80, Math.max(1, Math.ceil(Math.hypot(x1 - x0, y1 - y0))));
@@ -1326,11 +1272,7 @@ export function FlipdotBoard({ text, books }: { text?: BoardText; books?: BoardB
       pmx = mx; pmy = my;
 
       const CL = cellLum!, TM = textMask!;
-      if (fullScan) {
-        dirtyTargets = false;
-        let anyTrail = false;
-        activeN = 0;
-        for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) {
+      for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) {
         const i = y * cols + x;
         const useOld = inTrans && prevLum !== null && x + hash2(x, y) * 8 > sweep;
         const L = useOld ? prevLum! : CL;
@@ -1357,30 +1299,20 @@ export function FlipdotBoard({ text, books }: { text?: BoardText; books?: BoardB
         // cursor layers (C toggles) — stamped text is untouchable; guides live in the void only
         if (trailV && trailV[i] > 0) {
           trailV[i] *= 0.9;
-          if (trailV[i] < 0.02) trailV[i] = 0; else { anyTrail = true; motion = true; }
           if (!reduced && cursorMode === 1 && m === 0 && trailV[i] > 0.25) target = 1;
         }
         if (!reduced && cursorMode === 2 && m === 0 && guideOK && guideOK[i] && mx > -9999 &&
             (x === curCol || y === curRow) && (x + y) % 3 === 0) {
           target = 1;
         }
-        targets[i] = target;
         const pv = dotV[i];
         dotV[i] += (target - dotV[i]) * (reduced ? 1 : 0.38);
-        // latch: once the flip lands the dot snaps exact, is stamped into the
-        // static layer, and stops costing anything at all
-        if (Math.abs(target - dotV[i]) > 0.004) motion = true;
-        else if (dotV[i] !== target) { dotV[i] = target; stampStatic(x, y, target > 0.5); }
         const v = dotV[i];
         if (!reduced) {
           if (pv > 0.5 && v <= 0.5) heat[i] = 1;
           else if (heat[i] > 0.02) heat[i] *= 0.96;
           else heat[i] = 0;
-          if (heat[i] > 0.02) motion = true;
         }
-        if (v !== target || (!reduced && heat[i] > 0.02)) activeIdx[activeN++] = i;
-        // latched and cold: the static layer blit already shows this dot
-        if (pv === target && v === target && (reduced || heat[i] <= 0.02)) continue;
         if (v <= 0.04) {
           // afterglow: thermal mass — the dot cools instead of snapping cold
           if (!reduced && heat[i] > 0.02) {
@@ -1397,45 +1329,6 @@ export function FlipdotBoard({ text, books }: { text?: BoardText; books?: BoardB
         if (sx < 0.03) continue;
         ctx.drawImage(v > 0.5 ? dotSprites!.on : dotSprites!.off,
           x * cw + cw / 2 - cw * 0.42 * sx, y * chh + chh * 0.08, cw * 0.84 * sx, chh * 0.84);
-        }
-        trailAlive = anyTrail;
-      } else {
-        // fast path: only the dots still in motion, against cached targets
-        let w = 0;
-        for (let k = 0; k < activeN; k++) {
-          const i = activeIdx[k];
-          const x = i % cols, y = (i / cols) | 0;
-          const target = targets[i];
-          const pv = dotV[i];
-          dotV[i] += (target - dotV[i]) * (reduced ? 1 : 0.38);
-          if (Math.abs(target - dotV[i]) > 0.004) motion = true;
-          else if (dotV[i] !== target) { dotV[i] = target; stampStatic(x, y, target > 0.5); }
-          const v = dotV[i];
-          if (!reduced) {
-            if (pv > 0.5 && v <= 0.5) heat[i] = 1;
-            else if (heat[i] > 0.02) heat[i] *= 0.96;
-            else heat[i] = 0;
-            if (heat[i] > 0.02) motion = true;
-          }
-          if (v !== target || (!reduced && heat[i] > 0.02)) activeIdx[w++] = i;
-          if (pv === target && v === target && (reduced || heat[i] <= 0.02)) continue;
-          if (v <= 0.04) {
-            if (!reduced && heat[i] > 0.02) {
-              ctx.fillStyle = BG;
-              ctx.fillRect(x * cw - 0.5, y * chh - 0.5, cw + 1, chh + 1);
-              ctx.drawImage(dotSprites!.heat[Math.min(7, (heat[i] * 8) | 0)],
-                x * cw + cw * 0.08, y * chh + chh * 0.08, cw * 0.84, chh * 0.84);
-            }
-            continue;
-          }
-          ctx.fillStyle = BG;
-          ctx.fillRect(x * cw - 0.5, y * chh - 0.5, cw + 1, chh + 1);
-          const sx = Math.abs(2 * v - 1);
-          if (sx < 0.03) continue;
-          ctx.drawImage(v > 0.5 ? dotSprites!.on : dotSprites!.off,
-            x * cw + cw / 2 - cw * 0.42 * sx, y * chh + chh * 0.08, cw * 0.84 * sx, chh * 0.84);
-        }
-        activeN = w;
       }
 
       // laser eyes overlay: the one sanctioned red, and only while the meme is on
@@ -1460,7 +1353,6 @@ export function FlipdotBoard({ text, books }: { text?: BoardText; books?: BoardB
       // the now-playing title slides its underline in on hover, like any link
       if (nowLink) {
         nowLink.hoverP += ((nowLink.hover ? 1 : 0) - nowLink.hoverP) * (reduced ? 1 : 0.22);
-        if (Math.abs((nowLink.hover ? 1 : 0) - nowLink.hoverP) > 0.01) motion = true;
         if (nowLink.hoverP >= 0.02) {
           const uy = nowLink.row + 8;
           if (uy < rows) {
@@ -1476,7 +1368,6 @@ export function FlipdotBoard({ text, books }: { text?: BoardText; books?: BoardB
 
       for (const l of links) {
         l.hoverP += ((l.hover ? 1 : 0) - l.hoverP) * (reduced ? 1 : 0.22);
-        if (Math.abs((l.hover ? 1 : 0) - l.hoverP) > 0.01) motion = true;
         if (l.hoverP < 0.02) continue;
         const uy = l.row + l.gh * l.scale + 1;
         if (uy >= rows) continue;
@@ -1487,12 +1378,11 @@ export function FlipdotBoard({ text, books }: { text?: BoardText; books?: BoardB
           ctx.drawImage(dotSprites!.on, xx * cw + cw * 0.08, uy * chh + chh * 0.08, cw * 0.84, chh * 0.84);
         }
       }
-      if (motion) wake();
       raf = requestAnimationFrame(frame);
     }
 
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "c" || e.key === "C") { cursorMode = (cursorMode + 1) % 3; wake(); dirtyTargets = true; }
+      if (e.key === "c" || e.key === "C") cursorMode = (cursorMode + 1) % 3;
       if (e.key === "d" || e.key === "D") {
         const i = DENSITIES.findIndex((v) => Math.abs(v - density) < 0.01);
         density = DENSITIES[(i + 1) % DENSITIES.length];
@@ -1507,10 +1397,10 @@ export function FlipdotBoard({ text, books }: { text?: BoardText; books?: BoardB
         }
       }
     };
-    const onMove = (e: MouseEvent) => { mx = e.clientX; my = e.clientY; if (cursorMode !== 0) { wake(); dirtyTargets = true; } };
-    const onOut = () => { mx = -1e4; my = -1e4; wake(); dirtyTargets = true; };
+    const onMove = (e: MouseEvent) => { mx = e.clientX; my = e.clientY; };
+    const onOut = () => { mx = -1e4; my = -1e4; };
     const onTouch = (e: TouchEvent) => {
-      if (e.touches[0]) { mx = e.touches[0].clientX; my = e.touches[0].clientY; if (cursorMode !== 0) { wake(); dirtyTargets = true; } }
+      if (e.touches[0]) { mx = e.touches[0].clientX; my = e.touches[0].clientY; }
     };
     const onTouchEnd = () => { mx = -1e4; my = -1e4; };
 
