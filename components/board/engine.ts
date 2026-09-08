@@ -5,7 +5,7 @@
 // hover underlines, cursor trail, hotspots for links.
 
 import { glyph, glyphM, measureCols, measureM } from "./font";
-import { ON, OFF, BG, HEAT } from "./palette";
+import { ON, OFF, BG, HEAT, HEAT_FREE } from "./palette";
 import { hash2, easeInOut, rasterToCells } from "./raster";
 import { PW, PH } from "./portrait";
 
@@ -36,6 +36,8 @@ export type BoardOptions = {
   onRoute?: (path: string) => void;
   reduced?: boolean;
   page?: string;
+  /** false: no unlit grid. Only lit dots and their afterglow are drawn (pictograms) */
+  grid?: boolean;
 };
 
 const HELV = '"Helvetica Neue", Helvetica, Arial, sans-serif';
@@ -407,6 +409,7 @@ export class Board {
     const octx = this.offLayer.getContext("2d")!;
     octx.setTransform(dpr, 0, 0, dpr, 0, 0);
     octx.fillStyle = BG; octx.fillRect(0, 0, W, H);
+    if (this.opts.grid === false) return;
     octx.fillStyle = OFF;
     for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) {
       octx.beginPath();
@@ -508,6 +511,7 @@ export class Board {
     this.pmx = mx; this.pmy = my;
 
     const CL = this.cellLum!, TM = this.textMask!;
+    const grid = this.opts.grid !== false, heatPal = grid ? HEAT : HEAT_FREE;
     const prevLum = this.prevLum, prevMask = this.prevMask;
     const slashParam = this.slashParam, slashD = this.slashD, faceBox = this.faceBox, guideOK = this.guideOK;
     const layers = this.layers, nL = layers.length;
@@ -559,7 +563,7 @@ export class Board {
         if (!reduced && heat[i] > 0.02) {
           ctx.fillStyle = BG;
           ctx.fillRect(x * cw - 0.5, y * chh - 0.5, cw + 1, chh + 1);
-          ctx.fillStyle = HEAT[Math.min(7, (heat[i] * 8) | 0)];
+          ctx.fillStyle = heatPal[Math.min(7, (heat[i] * 8) | 0)];
           ctx.beginPath();
           ctx.ellipse(x * cw + cw / 2, y * chh + chh / 2, cw * 0.42, chh * 0.42, 0, 0, Math.PI * 2);
           ctx.fill();
@@ -570,6 +574,7 @@ export class Board {
       ctx.fillRect(x * cw - 0.5, y * chh - 0.5, cw + 1, chh + 1);
       const sx = Math.abs(2 * v - 1);
       if (sx < 0.03) continue;
+      if (!grid && v <= 0.5) continue; // no unlit face to show
       ctx.fillStyle = v > 0.5 ? ON : OFF;
       ctx.beginPath();
       ctx.ellipse(x * cw + cw / 2, y * chh + chh / 2, cw * 0.42 * sx, chh * 0.42, 0, 0, Math.PI * 2);

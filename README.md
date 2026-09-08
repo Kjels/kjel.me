@@ -8,13 +8,20 @@ The photos and text in `lib/board-text.ts` and `public/` are mine and not covere
 
 ```
 app/
-  page.tsx               the board, full viewport
+  page.tsx               the landing (the board is mounted in the layout)
+  work/, work/[slug]/    the ledger and its entries, roadmap read from GitHub hourly
+  about/                 the label
   config/                board copy editor (password)
   api/board              board copy read/write (Blob)
   api/now                Spotify now-playing, 25s revalidate
   api/view               visit ping → email
 components/
-  FlipdotBoard.tsx       the renderer and every board page
+  BoardShell.tsx         one board across routes: full on /, a strip elsewhere
+  board/                 the engine (font, palette, raster, portrait, engine.ts) and scenes/
+  board/pictos.ts        one animated dot pictogram per project, for the ledger
+  Picto.tsx, TickRule.tsx
+content/
+  work/index.ts          the project manifest; one .mdx body per project beside it
 lib/
   board-text.ts          every line the board stamps, with defaults
   blob.ts                Blob reads via the public CDN (quota notes inside)

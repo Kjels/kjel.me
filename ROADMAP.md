@@ -32,7 +32,8 @@ Ordered by value. Checked items are done.
 - [ ] **Fix the LinkedIn placeholder** on the about page
 - [x] **Split `FlipdotBoard.tsx`** into `font.ts`, `raster.ts`, `engine.ts`, `scenes/`, with a `strip` mode for the masthead
 - [x] **Wipe-to-DOM transition** from the board into HTML pages, canvas refit per frame while it resizes
-- [x] **Content layer.** Layout with masthead, tokens, MDX, `/work` with GitHub roadmap progress, `/work/[slug]`, `/about`. `/writing` waits for the first post
+- [x] **Content layer.** Layout with masthead, MDX, `/work` with GitHub roadmap progress, `/work/[slug]`, `/about`. `/writing` waits for the first post
+- [x] **The ledger.** `/work` as a sheet from the identity's asset book: one cell per project with a standalone animated dot pictogram, caption strip with a Life verb (MOVES / GROWS / OSC / STILL), GEN from the commit count, R-03 tick rule for the roadmap. `/about` as the 4E label. Helvetica only on content pages
 - [ ] **Push the project repos** so `/work` can read their roadmaps. Until then the progress bars are empty
 - [ ] **Photos for KIMS** and any other project page that needs them
 - [ ] **Landing.** Live strip, reactive nav tiles, idle behaviour

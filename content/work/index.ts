@@ -5,6 +5,9 @@
 
 export type Status = "live" | "building" | "prototype" | "parked";
 
+/** the ledger speaks Life: a project's state as a lifeform's */
+export const VERB: Record<Status, string> = { live: "MOVES", building: "GROWS", prototype: "OSC", parked: "STILL" };
+
 export type Project = {
   slug: string;
   title: string;
@@ -70,25 +73,6 @@ export const PROJECTS: Project[] = [
     started: "2026-04",
     stack: ["Python", "Claude Agent SDK", "FastAPI", "React"],
     body: () => import("./sprint-orchestrator.mdx"),
-  },
-  {
-    slug: "rack",
-    title: "Rack",
-    blurb: "Training and nutrition log with a coach that reads the data instead of a chat transcript.",
-    status: "parked",
-    repo: "Kjels/rack",
-    started: "2026-08",
-    stack: ["Next.js", "Postgres", "Claude"],
-    body: () => import("./rack.mdx"),
-  },
-  {
-    slug: "kept",
-    title: "Kept",
-    blurb: "A gift-based life story recording service. Someone you love answers questions on tape; you keep the tape.",
-    status: "parked",
-    started: "2026-04",
-    stack: ["Next.js", "Supabase", "R2"],
-    body: () => import("./kept.mdx"),
   },
 ];
 

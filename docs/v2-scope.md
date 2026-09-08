@@ -29,7 +29,7 @@ Removed from nav: BOOKS, NOW, NOTES.
 - `full`: the landing. Current 141/153 rows.
 - `strip`: 8–10 rows, fixed to the top of every HTML page. Carries the KJEL mark, clock, Spotify line, and the three nav words in the micro font. Live, hoverable, clickable.
 
-**Content layer.** Server-rendered HTML. Design tokens derived from the board: the amber/black palette, monospace headings, dot-grid texture as a background at low contrast, generous measure for body text. Photos and code render as normal HTML. No dots in body content.
+**Content layer.** Server-rendered HTML in the language of the KJEL identity system (the handoff in ~/Downloads/design_handoff_kjel_identity): ink sheets with 1.5px hairlines, title blocks, registration ticks, tracked-caps Helvetica labels, no second typeface, no radius, no shadows. `/work` is a ledger sheet of cells; each project has a pictogram of standalone lit dots (`components/board/pictos.ts`, rendered by the engine with `grid: false`) that is the mechanism of the thing, slow at rest and full speed on hover. Status speaks Life: MOVES / GROWS / OSC / STILL. Progress is the R-03 tick rule; the commit count is GEN. `/about` is the 4E shipping label. Adding a project = one manifest entry, one MDX body, one pictogram function.
 
 **Transition.** Board → content page uses the existing dithered column sweep. The dots cool to the off state as the HTML fades up beneath the canvas, then the canvas shrinks to the strip. Content page → board reverses it. Reduced motion: instant swap.
 

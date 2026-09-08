@@ -66,6 +66,29 @@ export async function fetchRepo(repo: string): Promise<RepoMeta | null> {
   }
 }
 
+/** how many commits the default branch has: the ledger's generation count */
+export async function fetchCommitCount(repo: string): Promise<number | null> {
+  try {
+    const headers: Record<string, string> = { Accept: "application/vnd.github+json" };
+    if (token()) headers.Authorization = `Bearer ${token()}`;
+    const res = await fetch(`https://api.github.com/repos/${repo}/commits?per_page=1`, { headers, next: { revalidate: REVALIDATE } });
+    if (!res.ok) return null;
+    const last = res.headers.get("link")?.match(/[?&]page=(\d+)>;\s*rel="last"/);
+    return last ? parseInt(last[1], 10) : (await res.json()).length;
+  } catch {
+    return null;
+  }
+}
+
+const MON = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
+/** "08 SEP 2026" */
+export function stamp(d: Date | string) {
+  const x = typeof d === "string" ? new Date(d) : d;
+  return `${String(x.getUTCDate()).padStart(2, "0")} ${MON[x.getUTCMonth()]} ${x.getUTCFullYear()}`;
+}
+/** "GEN 0034" */
+export const gen = (n: number) => "GEN " + String(n).padStart(4, "0");
+
 /** "2h ago", "3d ago", "5w ago" */
 export function ago(iso: string, now = Date.now()) {
   const m = Math.max(0, Math.floor((now - new Date(iso).getTime()) / 60000));

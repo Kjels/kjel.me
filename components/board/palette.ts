@@ -11,3 +11,5 @@ const lerpHex = (a: string, b: string, t: number) => {
 
 /** a dot that just flipped off cools through these, hottest first */
 export const HEAT = Array.from({ length: 8 }, (_, k) => lerpHex(OFF, ON, (0.12 * (k + 1)) / 8));
+/** the same ramp for a board with no unlit grid: it cools into the background */
+export const HEAT_FREE = Array.from({ length: 8 }, (_, k) => lerpHex(BG, ON, (0.2 * (k + 1)) / 8));
