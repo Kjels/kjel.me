@@ -48,15 +48,3 @@ export const BOARD_DEFAULTS: BoardText = {
   email: "mailto:hello@kjel.me",
 };
 
-// a book as the board renders it — built server-side from the media store
-export type BoardBook = {
-  slug: string;
-  title: string;
-  author: string;
-  rating?: number;
-  status?: "read" | "reading" | "tbr";
-  genre?: string;
-  review?: string;
-  url?: string | null;
-  intakeAt?: string;
-};

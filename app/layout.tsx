@@ -11,7 +11,7 @@ const plexMono = IBM_Plex_Mono({
 
 export const metadata: Metadata = {
   title: "kjel.me",
-  description: "Everything I'm listening to, watching, and reading — a living wall of my taste.",
+  description: "Kjel Schlemmer. A personal site rendered as a flip-dot sign.",
 };
 
 export default function RootLayout({

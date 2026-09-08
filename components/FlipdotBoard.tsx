@@ -1,14 +1,14 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { BOARD_DEFAULTS, type BoardText, type BoardBook } from "@/lib/board-text";
+import { BOARD_DEFAULTS, type BoardText } from "@/lib/board-text";
 
 // kjel.me landing: the whole viewport is a simulated flip-dot board.
 // A fixed left rail (mark/title + table of contents) persists across every page;
 // content populates the field alongside it. Pages flip in place with a wipe.
 // Text is a native 5x7 bitmap face (3x5 micro for links) stamped dot-for-dot.
 // The slash through the J is Kjel's mark: a permanent dark cut.
-// All pages are in-board; the media wall lives apart, unlinked, at /media.
+// All pages are in-board.
 // The portrait keeps home's upper-right; the cyclist laps the bottom edge.
 
 const ON = "#f4f4f2";
@@ -21,7 +21,7 @@ const lerpHex = (a: string, b: string, t: number) => {
   return `rgb(${pa.map((v, i) => (v + (pb[i] - v) * t) | 0).join(",")})`;
 };
 const HEAT = Array.from({ length: 8 }, (_, k) => lerpHex(OFF, ON, (0.12 * (k + 1)) / 8));
-const NAV = ["BOOKS", "WORK", "NOW", "ABOUT", "NOTES"];
+const NAV = ["WORK", "NOW", "ABOUT", "NOTES"];
 const DAYS = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
 const MONTHS = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
 
@@ -139,13 +139,11 @@ const DS: Record<string, string[]> = {
   ],
 };
 
-export function FlipdotBoard({ text, books }: { text?: BoardText; books?: BoardBook[] }) {
+export function FlipdotBoard({ text }: { text?: BoardText }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const hotsRef = useRef<HTMLDivElement>(null);
   const textRef = useRef(text);
   textRef.current = text;
-  const booksRef = useRef(books);
-  booksRef.current = books;
 
   useEffect(() => {
     // all editable copy (from /config via Blob); the defaults are the fallback
@@ -154,7 +152,6 @@ export function FlipdotBoard({ text, books }: { text?: BoardText; books?: BoardB
     // sequential, never random: a first visit always reads the sane ones first
     const ROLES = TXT.roles;
     const EXTERNAL: Record<string, string> = { LINKEDIN: TXT.linkedin, EMAIL: TXT.email };
-    const BOOKS_DATA: BoardBook[] = booksRef.current || [];
     const canvas = canvasRef.current!;
     const hots = hotsRef.current!;
     const ctx = canvas.getContext("2d")!;
@@ -500,157 +497,6 @@ export function FlipdotBoard({ text, books }: { text?: BoardText; books?: BoardB
       laserMask = m;
     }
 
-    /* ---------- the books catalog: shelves → paginated tables → book pages ---------- */
-    const cleanB = (s: string, micro?: boolean) => {
-      let out = "";
-      for (const ch of (s || "").toUpperCase()) if ((micro ? F3 : F)[ch] || ch === " ") out += ch;
-      return out.replace(/\s+/g, " ").trim();
-    };
-    type BShelf = { id: string; label: string; books: BoardBook[] };
-    function bookShelves(): BShelf[] {
-      const B = BOOKS_DATA;
-      const read = B.filter((b) => b.status !== "tbr");
-      // the main shelf: whatever's open now leads, marked in the margin
-      const all = [...read.filter((b) => b.status === "reading"), ...read.filter((b) => b.status !== "reading")];
-      const s: BShelf[] = [{ id: "all", label: "ALL", books: all }];
-      const favs = B.filter((b) => (b.rating ?? 0) >= 5);
-      if (favs.length) s.push({ id: "favorites", label: "FAVORITES", books: favs });
-      s.push({
-        id: "recent",
-        label: "RECENT",
-        books: [...read].sort((a, b) => (b.intakeAt || "").localeCompare(a.intakeAt || "")),
-      });
-      const pile = B.filter((b) => b.status === "tbr");
-      if (pile.length) s.push({ id: "pile", label: "THE PILE", books: pile });
-      const genres = [...new Set(B.map((b) => b.genre).filter(Boolean))] as string[];
-      for (const gn of genres.sort())
-        s.push({
-          id: "g-" + gn.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
-          label: cleanB(gn),
-          books: B.filter((b) => b.genre === gn),
-        });
-      return s;
-    }
-
-    // rating on the book page: filled 2x2 blocks for the score, a lone dot for the rest
-    function stampRating(col: number, row: number, n: number) {
-      const tm = textMask!;
-      for (let i = 0; i < 5; i++) {
-        const x0 = col + i * 4;
-        if (i < n) {
-          for (let dy = 0; dy < 2; dy++) for (let dx = 0; dx < 2; dx++) {
-            const yy = row + dy, xx = x0 + dx;
-            if (xx >= 0 && xx < cols && yy >= 0 && yy < rows) tm[yy * cols + xx] = 2;
-          }
-        } else {
-          const yy = row + 1, xx = x0;
-          if (xx >= 0 && xx < cols && yy >= 0 && yy < rows) tm[yy * cols + xx] = 2;
-        }
-      }
-    }
-
-    // rating in table rows: just the filled blocks, right-aligned
-    function stampRatingN(col: number, row: number, n: number) {
-      const tm = textMask!;
-      for (let i = 0; i < n; i++)
-        for (let dy = 0; dy < 2; dy++) for (let dx = 0; dx < 2; dx++) {
-          const yy = row + dy, xx = col + i * 4 + dx;
-          if (xx >= 0 && xx < cols && yy >= 0 && yy < rows) tm[yy * cols + xx] = 2;
-        }
-    }
-
-    function composeBooks(page: string, g: { colL: number; titleTop: number; contentTop: number; right: number; wide: boolean }) {
-      const shelves = bookShelves();
-      let parts = page.split(":");
-      if (parts.length === 1) parts = ["BOOKS", "SHELF", "all", "1"];
-      const limit = rows - (g.wide ? 16 : 8);
-      if (parts[1] === "SHELF") {
-        const shelf = shelves.find((s) => s.id === parts[2]) || shelves[0];
-        stamp("BOOKS", g.colL, g.titleTop, 2, undefined, false, true);
-        // the filter rail: every shelf, the current one marked
-        let fx = g.colL, fy = g.titleTop + 20;
-        for (const s of shelves) {
-          const w = measureM(s.label);
-          if (fx + w > g.right) { fx = g.colL; fy += 8; }
-          if (s.id === shelf.id) { marker(Math.max(0, fx - 4), fy + 1); stamp(s.label, fx, fy, 1, undefined, true); }
-          else stamp(s.label, fx, fy, 1, "BOOKS:SHELF:" + s.id + ":1", true);
-          fx += w + 8;
-        }
-        const top = fy + 11;
-        const perCol = Math.max(3, Math.floor((limit - top) / 8));
-        const nCols = g.wide ? 2 : 1;
-        const per = perCol * nCols;
-        const total = Math.max(1, Math.ceil(shelf.books.length / per));
-        const n = Math.min(Math.max(1, parseInt(parts[3] || "1", 10) || 1), total);
-        currentPage = "BOOKS:SHELF:" + shelf.id + ":" + n; // clamp the route to reality
-        const slice = shelf.books.slice((n - 1) * per, n * per);
-        const gut = 10;
-        const colW = Math.floor((g.right - g.colL - gut * (nCols - 1)) / nCols);
-        slice.forEach((b, i) => {
-          const x = g.colL + Math.floor(i / perCol) * (colW + gut);
-          const y = top + (i % perCol) * 8;
-          const rw = b.rating ? b.rating * 4 - 2 : 0;
-          let t = cleanB(b.title, true);
-          while (t && measureM(t) > colW - rw - 6) t = t.slice(0, -1).trimEnd();
-          stamp(t, x, y, 1, "BOOKS:BOOK:" + b.slug, true);
-          if (b.status === "reading") marker(Math.max(0, x - 4), y + 1);
-          if (b.rating) stampRatingN(x + colW - rw, y + 1, b.rating);
-        });
-        // the rail: flick through pages (arrow keys work too)
-        if (total > 1) {
-          const pr = limit + 3;
-          let px2 = g.colL;
-          if (n > 1) stamp("PREV", px2, pr, 1, "BOOKS:SHELF:" + shelf.id + ":" + (n - 1), true, true);
-          px2 += measureM("PREV") + 6;
-          stamp(n + "/" + total, px2, pr, 1, undefined, true);
-          px2 += measureM(n + "/" + total) + 6;
-          if (n < total) stamp("NEXT", px2, pr, 1, "BOOKS:SHELF:" + shelf.id + ":" + (n + 1), true, true);
-        }
-        return;
-      }
-      // a single book: the title IS the cover
-      const slug = parts[2];
-      const book = BOOKS_DATA.find((b) => b.slug === slug);
-      if (!book) { stamp("BOOKS", g.colL, g.titleTop, 2, undefined, false, true); return; }
-      let r = g.titleTop;
-      for (const line of wrap(cleanB(book.title), 2, Math.round(cols * (g.wide ? 0.7 : 0.88))).slice(0, 2)) {
-        stamp(line, g.colL, r, 2);
-        r += 16;
-      }
-      stamp(cleanB(book.author, true), g.colL, r, 1, undefined, true);
-      r += 8;
-      if (book.rating) { stampRating(g.colL, r, book.rating); r += 6; }
-      const statusLbl = book.status === "tbr" ? "TO BE READ" : book.status === "reading" ? "NOW READING" : "READ";
-      stamp(statusLbl, g.colL, r, 1, undefined, true);
-      r += 10;
-      const revLines = book.review ? wrap(cleanB(book.review), 1, Math.round(cols * (g.wide ? 0.55 : 0.85))) : [];
-      const per = Math.max(1, Math.floor((limit - r) / 9));
-      const totalR = Math.max(1, Math.ceil(revLines.length / per));
-      const nR = Math.min(Math.max(1, parseInt(parts[3] || "1", 10) || 1), totalR);
-      currentPage = "BOOKS:BOOK:" + slug + (nR > 1 ? ":" + nR : "");
-      for (const line of revLines.slice((nR - 1) * per, nR * per)) {
-        stamp(line, g.colL, r, 1);
-        r += 9;
-      }
-      const pr = limit + 3;
-      let px2 = g.colL;
-      stamp("BOOKS", px2, pr, 1, "BOOKS", true, true);
-      px2 += measureM("BOOKS") + 8;
-      if (book.url) {
-        EXTERNAL.GOODREADS = book.url;
-        stamp("GOODREADS", px2, pr, 1, "GOODREADS", true, true);
-        px2 += measureM("GOODREADS") + 8;
-      }
-      if (totalR > 1) {
-        if (nR > 1) { stamp("PREV", px2, pr, 1, "BOOKS:BOOK:" + slug + ":" + (nR - 1), true, true); }
-        px2 += measureM("PREV") + 6;
-        stamp(nR + "/" + totalR, px2, pr, 1, undefined, true);
-        px2 += measureM(nR + "/" + totalR) + 6;
-        if (nR < totalR) stamp("NEXT", px2, pr, 1, "BOOKS:BOOK:" + slug + ":" + (nR + 1), true, true);
-      }
-    }
-
-    /* ---------- pages: fixed rail on every page; content fills the field ---------- */
     function compose(page: string) {
       sctx.fillStyle = "#000"; sctx.fillRect(0, 0, SW, SH);
       hots.innerHTML = "";
@@ -673,7 +519,7 @@ export function FlipdotBoard({ text, books }: { text?: BoardText; books?: BoardB
           let nx = right - total;
           const menuRow = nx < colL + 23 ? 12 : 3; // drop below KJEL. if the board is narrow
           for (const wd of NAV) {
-            const here = wd === page || (wd === "BOOKS" && page.startsWith("BOOKS"));
+            const here = wd === page;
             if (here) { marker(nx - 4, menuRow + 1); stamp(wd, nx, menuRow, 1, undefined, true); }
             else stamp(wd, nx, menuRow, 1, wd, true);
             nx += measureM(wd) + gap;
@@ -699,9 +545,6 @@ export function FlipdotBoard({ text, books }: { text?: BoardText; books?: BoardB
             }
             irow += 4;
           }
-        } else if (page.startsWith("BOOKS")) {
-          stamp("KJEL.", colL, 3, 1, "HOME", true);
-          composeBooks(page, { colL, titleTop, contentTop, right: Math.round(cols * 0.94), wide: true });
         } else {
           stamp("KJEL.", colL, 3, 1, "HOME", true);
           stamp(page, colL, titleTop, 2, undefined, false, true); // the page word, quietly underlined
@@ -731,7 +574,7 @@ export function FlipdotBoard({ text, books }: { text?: BoardText; books?: BoardB
           stamp("EMAIL", colL + measureM("LINKEDIN") + 6, rows - 10, 1, "EMAIL", true, true);
           // work leads; hobbies follow
           flow(TXT.about, measure, rows - 21);
-        } else if (page !== "HOME" && !page.startsWith("BOOKS")) {
+        } else if (page !== "HOME") {
           const end = flow(PAGES[page] || [], undefined, undefined, page === "WORK");
           if (page === "NOTES") stampSmiley(contentCol + 14, end + 20, 13, true);
         }
@@ -742,7 +585,7 @@ export function FlipdotBoard({ text, books }: { text?: BoardText; books?: BoardB
         for (const wd of NAV) {
           const wc = measureM(wd);
           if (nx + wc > cols - 3) { nx = colL; ny += 9; }
-          const here = wd === page || (wd === "BOOKS" && page.startsWith("BOOKS"));
+          const here = wd === page;
           if (here) { marker(Math.max(0, nx - 4), ny + 1); stamp(wd, nx, ny, 1, undefined, true); }
           else stamp(wd, nx, ny, 1, wd, true);
           nx += wc + 6;
@@ -760,9 +603,6 @@ export function FlipdotBoard({ text, books }: { text?: BoardText; books?: BoardB
             }
             irow += 4;
           }
-          } else if (page.startsWith("BOOKS")) {
-          stamp("KJEL.", colL, 3, 1, "HOME", true);
-          composeBooks(page, { colL, titleTop, contentTop, right: cols - 3, wide: false });
         } else {
           stamp("KJEL.", colL, 3, 1, "HOME", true);
           stamp(page, colL, titleTop, 2, undefined, false, true);
@@ -780,7 +620,7 @@ export function FlipdotBoard({ text, books }: { text?: BoardText; books?: BoardB
           stamp(TXT.placeNarrow, colL, placeRow, 1);
           stamp("LINKEDIN", colL, linksRow, 1, "LINKEDIN", true, true);
           stamp("EMAIL", colL + measureM("LINKEDIN") + 6, linksRow, 1, "EMAIL", true, true);
-        } else if (page !== "HOME" && !page.startsWith("BOOKS")) {
+        } else if (page !== "HOME") {
           let crow = contentTop;
           let head = true;
           const bullets = page === "WORK";
@@ -840,22 +680,12 @@ export function FlipdotBoard({ text, books }: { text?: BoardText; books?: BoardB
 
     const hashFor = (page: string) => {
       if (page === "HOME") return "#";
-      if (page.startsWith("BOOKS:")) {
-        const p = page.split(":");
-        return "#books/" + p[2] + (p[3] && p[3] !== "1" ? "/" + p[3] : "");
-      }
       return "#" + page.toLowerCase();
     };
     function pageFromHash(): string {
       let h = "";
       try { h = decodeURIComponent(location.hash.slice(1)).toLowerCase(); } catch { h = location.hash.slice(1).toLowerCase(); }
       if (!h) return "HOME";
-      if (h === "books") return "BOOKS";
-      if (h.startsWith("books/")) {
-        const p = h.split("/");
-        if (bookShelves().some((s) => s.id === p[1])) return "BOOKS:SHELF:" + p[1] + ":" + (p[2] || "1");
-        return "BOOKS:BOOK:" + p[1] + (p[2] ? ":" + p[2] : "");
-      }
       const up = h.toUpperCase();
       return NAV.includes(up) ? up : "HOME";
     }
@@ -1365,13 +1195,6 @@ export function FlipdotBoard({ text, books }: { text?: BoardText; books?: BoardB
 
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "c" || e.key === "C") cursorMode = (cursorMode + 1) % 3;
-      if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
-        const p = currentPage.split(":");
-        if (p[0] === "BOOKS" && p[1] === "SHELF") {
-          const n = (parseInt(p[3] || "1", 10) || 1) + (e.key === "ArrowRight" ? 1 : -1);
-          if (n >= 1) navigate("BOOKS:SHELF:" + p[2] + ":" + n); // composeBooks clamps to the last page
-        }
-      }
     };
     const onMove = (e: MouseEvent) => { mx = e.clientX; my = e.clientY; };
     const onOut = () => { mx = -1e4; my = -1e4; };
