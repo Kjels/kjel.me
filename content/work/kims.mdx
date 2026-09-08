@@ -1,0 +1,26 @@
+## Why
+
+Tracking food is a data-entry problem, not a features problem. Every app makes you search, pick a serving size, and type a number, so you stop after a week. A scale that already knows what is on it removes the typing. Put the scale in the kitchen, on its own screen, and logging a meal becomes: put the bowl down, tap the thing, done.
+
+The second idea follows from the first. If every gram you eat is weighed, the pantry can deplete itself. Stock stays live for free, and the appliance can answer "what can I make right now" honestly.
+
+## What it is
+
+A Raspberry Pi 4 in a 3D-printed base with a 5 kg load cell and an HX711 amplifier under the platform, running a touchscreen kiosk. The weight is pinned to the top of every screen. Four loops feed each other:
+
+- **Log.** Weigh, identify, done. Entries land in breakfast, lunch, dinner or snack by time of day. Recents and favourites make a snack two taps.
+- **Stock.** Two tiers, staples you track loosely and items you actively deplete. Logging subtracts grams from stock. Par levels feed a shopping list.
+- **Cook.** Guided recipes with weigh-to-target: the field goes green when the bowl is in range, and the recipe logs the actual amounts.
+- **Learn.** Goal-aware suggestions from what is in stock, preference from what gets logged, use-it-up nudges before things spoil.
+
+A phone companion runs as a PWA for barcode intake and correcting macros away from the kitchen.
+
+## Where it stands
+
+v0.3 runs as an appliance with the real scale wired and calibrated. A full QA pass in August drove every path end to end in simulation: weigh to log, bowl flow with auto-tare between ingredients, held-item detection when something is lifted before logging, estimate flow with no scale, remove from day view. The bugs that pass found are fixed: a missing toast helper that silently broke confirmations, a multi-client tare hazard when a second browser watched the appliance, and session tares that were persisting to disk as a corrupted zero.
+
+The friction list is what comes next: a visible "clear the scale" state after logging, a picker that learns frequency so oats, milk and eggs are always the first tiles, and an undo pill on the done screen.
+
+## Hardware
+
+Base, rear, platform and calibration coupon are OpenSCAD files with STLs beside them. The load cell bolts between the two halves; the platform sits on the cell's free end.

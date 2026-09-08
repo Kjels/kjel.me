@@ -1,0 +1,9 @@
+## Why
+
+A sprint is a directory of markdown: a vision, constraints, a task graph with acceptance criteria, an agent roster, an escalation policy. The orchestrator reads it, sorts the graph, runs specialist agents in parallel waves against a budget, validates output with a cheap model, and stops for a human at review gates. The dashboard watches the state files and renders the graph, decisions and cost live.
+
+Everything the run knows is in files, so a sprint can be read, resumed, or handed to a person without the orchestrator.
+
+## Where it stands
+
+Designed, not yet run end to end with the Python engine. The dashboard was built by an earlier, prompt-based version of the same idea. The two halves still disagree on where sprints live and how agents are described. The roadmap is a list of those seams.

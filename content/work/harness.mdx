@@ -1,0 +1,9 @@
+## Why
+
+Claude Code keeps its session transcripts under the working directory's path. Move to another machine and `--resume` has nothing to resume. Harness turns the transcript directory into a git repo synced by the tool's own lifecycle hooks, and mirrors paths across a Mac and a WSL box so the same session opens on either.
+
+It also wraps the session in a tmux workspace: Claude in one pane, a swappable view pane beside it for a shell, git, the dev server, or a log tail.
+
+## Where it stands
+
+The session index, resume, workspace and hooks work on one person's two machines. The first-run path on a fresh machine has not been proven, and the tmux config still applies globally. No dependencies beyond Node, tmux and git.

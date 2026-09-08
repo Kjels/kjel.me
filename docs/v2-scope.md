@@ -74,9 +74,9 @@ Done in phase 0: media wall remnants, guestbook, books (board pages, `/admin`, `
 
 **0. Clear the ground.** Done 2026-09-08. Deletions above plus the whole books feature. README, LICENSE, `.env.example`, metadata.
 
-**1. Board becomes a component.** Split `FlipdotBoard.tsx` into `board/font.ts`, `board/raster.ts`, `board/engine.ts`, `board/scenes/`. Add `mode: "full" | "strip"`. Build the wipe-to-DOM transition. Nothing visible changes on the landing yet.
+**1. Board becomes a component.** Done 2026-09-08. `components/board/{font,palette,raster,portrait,engine}.ts` + `scenes/kjel.ts`. `BoardShell` in the root layout owns full/strip mode and the transition.
 
-**2. Content layer.** Root layout with strip + content slot. Design tokens. MDX pipeline. `/work` index with GitHub roadmap progress. `/work/kims` as the first showcase page. `/writing` with at least one post or hidden until there is one. `/about`. Semantic HTML means SEO and screen readers work for the first time.
+**2. Content layer.** Done 2026-09-08. `@next/mdx`, `content/work/index.ts` manifest + one MDX per project, `content/about.mdx`, `lib/github.ts` (roadmap + repo metadata, hourly, `GITHUB_TOKEN` optional), `DotBar` progress. `/writing` not routed yet.
 
 **3. Landing.** Live strip. Nav tiles. Three or four of the playful candidates. Wave on arrival.
 

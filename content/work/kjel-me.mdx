@@ -1,0 +1,15 @@
+## Why
+
+A personal site should be one idea done properly. This one is a flip-dot sign: a fixed grid of dots that flip between on and off, with the afterglow and the mechanical wipe of the real thing. Everything on the landing is stamped from a 5x7 bitmap face, dot for dot. The photo is halftoned onto the same grid.
+
+The sign cannot carry paragraphs or photographs, so the rest of the site is plain HTML behind it. The sign shrinks to a masthead and stays live.
+
+## How it works
+
+One canvas, one frame loop. A scene composes a page into a text mask and a raster layer; the engine turns that into targets per dot and animates each dot toward its target with a little thermal mass, so a dot that switches off cools through eight shades instead of snapping. Page changes are a dithered column sweep keyed by a stable per-cell hash, so the wipe never shimmers. Clock, now-playing and the cyclist are dynamic layers redrawn only when their key changes.
+
+The grid is a fixed 141 rows landscape, 153 portrait, and the dot size is fluid. The composition reads identically on a phone and a 4K monitor; the monitor just stands closer to the same board.
+
+## Where it stands
+
+The renderer is done and modular. The content layer, this page included, is being built. The project index pulls each repo's roadmap from GitHub so the progress here is the progress there.

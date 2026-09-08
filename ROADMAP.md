@@ -18,8 +18,7 @@ v2 keeps the board as the landing and adds HTML pages for work, writing, and abo
 
 - LinkedIn link on the about page is a placeholder URL
 - Steam source is half-wired: env vars and types exist, no reader
-- The engine is ~1,100 lines inside a single `useEffect` closure with no module boundaries
-- Canvas-only DOM: no semantic text fallback, so screen readers and search engines see almost nothing
+- The landing is canvas-only; the HTML pages are indexable, the landing has one hidden heading
 - Three renderer experiments (sprite-blit at 1.8× density, bistable latched-dot renderer, coalesce navigation) were built and reverted in Sept 2026. The bistable idea is worth landing after the module split
 - No tests, no CI
 
@@ -31,15 +30,17 @@ Ordered by value. Checked items are done.
 - [x] **LICENSE** (MIT), README, complete `.env.example`
 - [ ] **README GIF** of a page flip
 - [ ] **Fix the LinkedIn placeholder** on the about page
-- [ ] **Split `FlipdotBoard.tsx`** into `font.ts`, `raster.ts`, `engine.ts`, `scenes/`, with a `strip` mode for the masthead. Prerequisite for everything below
-- [ ] **Wipe-to-DOM transition** from the board into HTML pages
-- [ ] **Content layer.** Layout with masthead, tokens, MDX, `/work` with GitHub roadmap progress, `/work/kims`, `/about`, `/writing` hidden until the first post
+- [x] **Split `FlipdotBoard.tsx`** into `font.ts`, `raster.ts`, `engine.ts`, `scenes/`, with a `strip` mode for the masthead
+- [x] **Wipe-to-DOM transition** from the board into HTML pages, canvas refit per frame while it resizes
+- [x] **Content layer.** Layout with masthead, tokens, MDX, `/work` with GitHub roadmap progress, `/work/[slug]`, `/about`. `/writing` waits for the first post
+- [ ] **Push the project repos** so `/work` can read their roadmaps. Until then the progress bars are empty
+- [ ] **Photos for KIMS** and any other project page that needs them
 - [ ] **Landing.** Live strip, reactive nav tiles, idle behaviour
-- [ ] **Semantic shadow layer.** Emit `BoardText` / `BoardBook` as visually-hidden HTML plus `<noscript>`. Fixes SEO and accessibility in one move since the data is already server-side
-- [ ] **Extract the engine** as a standalone package: `createBoard(canvas, { rows, palette, transition })` with `stamp` / `stampImage` / `wrap` / `measure` / `hotspot` and a `compose(page)` callback. Demo page. This is the part strangers would use
+- [ ] **Semantic shadow layer** for the landing: emit the board copy as visually-hidden HTML plus `<noscript>`
+- [ ] **Extract the engine** (`components/board/`) as a standalone package with a demo page. The `Board` class already has the API; it needs a build and a README
 - [ ] **Revisit the bistable renderer** once the engine is modular. Measured at 1.65s → 0.19s main-thread per 5s idle before it was reverted
 - [ ] OG image, `robots.txt`, `sitemap`
-- [ ] Finish or delete the Steam source
+- [ ] Trim `/config` to the fields the board still uses (home copy, roles, place, links)
 
 ## Non-goals
 

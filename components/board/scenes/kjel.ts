@@ -178,9 +178,12 @@ export function createKjelScene(TXT: BoardText) {
     const hhs = String(hh).padStart(2, "0"), mms = String(mm).padStart(2, "0");
     if (!home) {
       clearNowHot(b); // the announcement lives on home only
-      // the strip: a small clock, centered, colon beating
+      // the strip: a small clock, centered, colon beating; dropped when the
+      // mark and the menu leave it no room (phones)
       const row = Math.round((rows - 5) / 2);
       const w = measureM(hhs) + 2 + measureM(":") + 2 + measureM(mms);
+      const navW = NAV.reduce((s, wd) => s + measureM(wd) + 6, 0) - 6;
+      if (cols / 2 - w / 2 - 8 < 3 + measureM("KJEL.") || cols / 2 + w / 2 + 8 > cols - 3 - navW) { L.halo = null; return; }
       let x = Math.round((cols - w) / 2);
       b.stampInto(L.mask, hhs, x, row, 1, true); x += measureM(hhs) + 2;
       if (reduced || ss % 2 === 0) b.stampInto(L.mask, ":", x, row, 1, true);
