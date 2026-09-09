@@ -2,9 +2,9 @@
 
 import { useEffect, useRef } from "react";
 import { Board } from "./board/engine";
-import { PICTOS } from "./board/pictos";
+import { PICTOS, SIZE } from "./board/pictos";
 
-// One project's pictogram: a 7x7 grid of standalone dots on a board with no unlit layer.
+// One project's mark: a lifeform on a small torus of standalone dots, no unlit layer.
 // Steps a little faster while hovered or focused.
 export function Picto({ slug, className }: { slug: string; className?: string }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -20,14 +20,14 @@ export function Picto({ slug, className }: { slug: string; className?: string })
       canvas,
       hots,
       grid: false,
-      rows: () => 7, // always a 7x7 grid; the box sets the pitch
+      rows: () => SIZE, // always the torus; the box sets the pitch
       compose: () => {},
       tick: (b, t) => {
         // the pictogram's own clock: it runs at a quarter speed until the cell is live
         const dt = last < 0 ? 0 : Math.min(0.1, t - last);
         last = t;
         const live = host.matches(":hover, :focus-within") || host.dataset.live !== undefined;
-        clock += dt * (b.reduced ? 0 : live ? 1.6 : 1);
+        clock += dt * (b.reduced ? 0 : live ? 2 : 1);
         const L = b.layers[0] ?? b.layer();
         L.mask.fill(0);
         picto(b, L, clock);

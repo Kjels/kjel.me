@@ -7,7 +7,6 @@ import { TickRule } from "@/components/TickRule";
 export const metadata = { title: "kjel.me / work" };
 export const revalidate = 3600;
 
-// The ledger. One band per project, full width.
 export default async function Work() {
   const rows = await Promise.all(
     PROJECTS.map(async (p) => {
@@ -18,24 +17,24 @@ export default async function Work() {
     }),
   );
   return (
-    <div className="ledger">
+    <div className="work">
       <h1 className="sr-only">Work</h1>
-      <ol className="rows">
+      <ol className="cards">
         {rows.map(({ p, roadmap, commits }, i) => (
           <li key={p.slug}>
-            <Link href={`/work/${p.slug}`} className="row">
-              <Picto slug={p.slug} className="c-picto" />
-              <span className="c-no">{String(i + 1).padStart(2, "0")}</span>
-              <span className="c-main">
-                <span className="name">{p.title}</span>
-                <span className="meta">
-                  <span>{VERB[p.status]}</span>
-                  <span>{p.started}</span>
-                  {commits != null && <span>{gen(commits)}</span>}
-                  {roadmap && roadmap.total > 0 && <TickRule done={roadmap.done} total={roadmap.total} />}
-                </span>
+            <Link href={`/work/${p.slug}`} className="card">
+              <span className="card-top">
+                <span>{String(i + 1).padStart(2, "0")}</span>
+                <span>{VERB[p.status]}</span>
               </span>
-              <span className="c-blurb">{p.blurb}</span>
+              <Picto slug={p.slug} className="card-mark" />
+              <span className="card-name">{p.title}</span>
+              <span className="card-blurb">{p.blurb}</span>
+              <span className="card-meta">
+                <span>{p.started}</span>
+                {commits != null && <span>{gen(commits)}</span>}
+                {roadmap && roadmap.total > 0 && <TickRule done={roadmap.done} total={roadmap.total} />}
+              </span>
             </Link>
           </li>
         ))}

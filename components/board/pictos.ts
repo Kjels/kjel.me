@@ -1,82 +1,52 @@
-// Pictograms for the ledger: 7x7 symbols in standalone dots, the way the
-// identity draws its pictograms (arrow, plus, solidus). Two to five frames
-// each, stepped slowly. `t` is the pictogram's own clock in seconds.
+// Each project's mark is a lifeform from the identity's fauna, run live under
+// Conway's rule B3/S23 on a small torus. Unique per project, alive by
+// definition, one generation every 0.8s. `t` is the mark's own clock.
 
 import type { Board, Layer } from "./engine";
 
 export type Picto = (b: Board, L: Layer, t: number) => void;
 
-const G = 7;
+export const SIZE = 9; // the torus
+const GEN = 0.8; // seconds per generation
 
-/** draw a 7x7 frame (row strings, "1" lit) centred on the board */
-function frame(b: Board, L: Layer, rows: string[]) {
-  const ox = Math.floor((b.cols - G) / 2), oy = Math.floor((b.rows - G) / 2);
-  for (let y = 0; y < rows.length; y++) for (let x = 0; x < rows[y].length; x++) {
-    if (rows[y][x] !== "1") continue;
-    const xx = ox + x, yy = oy + y;
-    if (xx >= 0 && xx < b.cols && yy >= 0 && yy < b.rows) L.mask[yy * b.cols + xx] = 1;
-  }
+function life(seed: string[]): Picto {
+  const N = SIZE;
+  let cells = new Uint8Array(N * N);
+  let at = -1;
+  const reset = () => {
+    cells = new Uint8Array(N * N);
+    const oy = Math.floor((N - seed.length) / 2), ox = Math.floor((N - seed[0].length) / 2);
+    for (let y = 0; y < seed.length; y++) for (let x = 0; x < seed[y].length; x++) if (seed[y][x] === "1") cells[(oy + y) * N + ox + x] = 1;
+  };
+  const step = () => {
+    const nb = new Uint8Array(N * N);
+    for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+      let c = 0;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        if (!dx && !dy) continue;
+        c += cells[((y + dy + N) % N) * N + ((x + dx + N) % N)];
+      }
+      nb[y * N + x] = (cells[y * N + x] ? c === 2 || c === 3 : c === 3) ? 1 : 0;
+    }
+    cells = nb;
+  };
+  return (b, L, t) => {
+    const g = Math.floor(t / GEN) % 400; // reseed every 400 generations, in case a torus gets stale
+    if (g < at || at < 0) { reset(); at = 0; }
+    while (at < g) { step(); at++; }
+    const ox = Math.floor((b.cols - N) / 2), oy = Math.floor((b.rows - N) / 2);
+    for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+      if (!cells[y * N + x]) continue;
+      const xx = ox + x, yy = oy + y;
+      if (xx >= 0 && xx < b.cols && yy >= 0 && yy < b.rows) L.mask[yy * b.cols + xx] = 1;
+    }
+  };
 }
 
-/** step through frames, holding each for `hold` seconds */
-const cycle = (frames: string[][], hold: number): Picto => (b, L, t) => frame(b, L, frames[Math.floor(t / hold) % frames.length]);
-
-/** KIMS: a scale. Something is set on the platform, weighed, taken off. */
-const kims = cycle([
-  ["0000000", "0000000", "0000000", "0000000", "0000000", "1111111", "0010100"],
-  ["0000000", "0000000", "0011100", "0011100", "0000000", "1111111", "0010100"],
-  ["0000000", "0000000", "0000000", "0011100", "0011100", "1111111", "0010100"],
-  ["0000000", "0000000", "0000000", "0011100", "0011100", "1111111", "0010100"],
-  ["0000000", "0000000", "0000000", "0000000", "0000000", "1111111", "0010100"],
-], 1.2);
-
-/** kjel.me: the strike through the J, drawn in, held, cleared. */
-const kjelMe = cycle([
-  ["0000000", "0000000", "0000000", "0000000", "0000000", "0000000", "0000000"],
-  ["0000001", "0000000", "0000000", "0000000", "0000000", "0000000", "0000000"],
-  ["0000001", "0000010", "0000000", "0000000", "0000000", "0000000", "0000000"],
-  ["0000001", "0000010", "0000100", "0000000", "0000000", "0000000", "0000000"],
-  ["0000001", "0000010", "0000100", "0001000", "0000000", "0000000", "0000000"],
-  ["0000001", "0000010", "0000100", "0001000", "0010000", "0000000", "0000000"],
-  ["0000001", "0000010", "0000100", "0001000", "0010000", "0100000", "0000000"],
-  ["0000001", "0000010", "0000100", "0001000", "0010000", "0100000", "1000000"],
-  ["0000001", "0000010", "0000100", "0001000", "0010000", "0100000", "1000000"],
-  ["0000001", "0000010", "0000100", "0001000", "0010000", "0100000", "1000000"],
-  ["0000001", "0000010", "0000100", "0001000", "0010000", "0100000", "1000000"],
-], 0.32);
-
-/** Harness: back and forth between two machines. */
-const harness = cycle([
-  ["0010000", "0111111", "0010000", "0000000", "0000000", "0000000", "0000000"],
-  ["0010000", "0111111", "0010000", "0000000", "0000000", "0000000", "0000000"],
-  ["0000000", "0000000", "0000000", "0000000", "0000100", "1111110", "0000100"],
-  ["0000000", "0000000", "0000000", "0000000", "0000100", "1111110", "0000100"],
-], 1.1);
-
-/** Capture: a funnel, and something passing through it. */
-const capture = cycle([
-  ["1111111", "0111110", "0011100", "0001000", "0001000", "0001000", "0000000"],
-  ["1111111", "0111110", "0011100", "0001000", "0001000", "0001000", "0000000"],
-  ["1111111", "0111110", "0011100", "0001000", "0001000", "0001000", "0001000"],
-  ["1111111", "0111110", "0011100", "0001000", "0001000", "0000000", "0001000"],
-  ["1111111", "0111110", "0011100", "0001000", "0000000", "0000000", "0001000"],
-  ["1111111", "0111110", "0011100", "0001000", "0001000", "0001000", "0000000"],
-], 0.6);
-
-/** Sprint Orchestrator: one node fans out, the branches light in turn. */
-const sprint = cycle([
-  ["0000000", "0000000", "0000000", "1100000", "0000000", "0000000", "0000000"],
-  ["0000011", "0000100", "0001000", "1110000", "0000000", "0000000", "0000000"],
-  ["0000011", "0000100", "0001000", "1111111", "0000000", "0000000", "0000000"],
-  ["0000011", "0000100", "0001000", "1111111", "0001000", "0000100", "0000011"],
-  ["0000011", "0000100", "0001000", "1111111", "0001000", "0000100", "0000011"],
-  ["0000000", "0000000", "0000000", "1100000", "0000000", "0000000", "0000000"],
-], 0.9);
-
 export const PICTOS: Record<string, Picto> = {
-  kims,
-  "kjel-me": kjelMe,
-  harness,
-  capture,
-  "sprint-orchestrator": sprint,
+  kims: life(["0111", "1110"]), // toad, period 2
+  "kjel-me": life(["010", "001", "111"]), // glider, moves
+  harness: life(["01111", "10001", "00001", "10010"]), // lightweight spaceship, moves
+  capture: life(["1100", "1000", "0001", "0011"]), // beacon, period 2
+  "sprint-orchestrator": life(["0100", "1010", "0101", "0010"]), // clock, period 2
 };
