@@ -6,7 +6,7 @@ import type { Board, Layer } from "./engine";
 
 export type Picto = (b: Board, L: Layer, t: number) => void;
 
-export const SIZE = 9; // the torus
+export const SIZE = 11; // the torus: wide enough that a spaceship never meets itself
 const GEN = 0.8; // seconds per generation
 
 function life(seed: string[]): Picto {
@@ -48,5 +48,5 @@ export const PICTOS: Record<string, Picto> = {
   "kjel-me": life(["010", "001", "111"]), // glider, moves
   harness: life(["01111", "10001", "00001", "10010"]), // lightweight spaceship, moves
   capture: life(["1100", "1000", "0001", "0011"]), // beacon, period 2
-  "sprint-orchestrator": life(["0100", "1010", "0101", "0010"]), // clock, period 2
+  "sprint-orchestrator": life(["0010", "1010", "0101", "0100"]), // clock, period 2
 };
