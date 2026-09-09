@@ -20,7 +20,9 @@ export default async function ProjectPage({ params }: { params: Promise<{ slug: 
   const { slug } = await params;
   const p = projectBySlug(slug);
   if (!p) notFound();
-  const no = String(PROJECTS.indexOf(p) + 1).padStart(2, "0");
+  const idx = PROJECTS.indexOf(p);
+  const prev = PROJECTS[(idx - 1 + PROJECTS.length) % PROJECTS.length];
+  const next = PROJECTS[(idx + 1) % PROJECTS.length];
   const [{ default: Body }, roadmap, repo, commits] = await Promise.all([
     p.body(),
     p.repo ? fetchRoadmap(p.repo) : null,
@@ -34,15 +36,15 @@ export default async function ProjectPage({ params }: { params: Promise<{ slug: 
       <header className="entry-top">
         <Picto slug={p.slug} className="entry-picto" />
         <div className="entry-title">
-          <p className="crumb"><Link href="/work">Work</Link> · {no}</p>
+          <p className="crumb"><Link href="/work">Work</Link> <span aria-hidden>·</span> <span className="num">{String(idx + 1).padStart(2, "0")}</span></p>
           <h1>{p.title}</h1>
           <p className="entry-blurb">{p.blurb}</p>
         </div>
         <dl className="entry-facts">
           <div><dt>State</dt><dd>{VERB[p.status]}</dd></div>
-          <div><dt>Since</dt><dd>{p.started}</dd></div>
-          {commits != null && <div><dt>Gen</dt><dd>{gen(commits)}</dd></div>}
-          {repo && <div><dt>Pushed</dt><dd>{stamp(repo.pushedAt)}</dd></div>}
+          <div><dt>Since</dt><dd className="num">{p.started}</dd></div>
+          {commits != null && <div><dt>Gen</dt><dd className="num">{gen(commits)}</dd></div>}
+          {repo && <div><dt>Pushed</dt><dd className="num">{stamp(repo.pushedAt)}</dd></div>}
         </dl>
       </header>
 
@@ -51,28 +53,35 @@ export default async function ProjectPage({ params }: { params: Promise<{ slug: 
           <Body />
         </div>
         <aside className="rail">
-          <dl className="fields">
-            <div><dt>Stack</dt><dd>{p.stack.join(" · ")}</dd></div>
-            {(p.repo || p.site) && (
-              <div><dt>Links</dt><dd>
-                {p.repo && <a href={`https://github.com/${p.repo}`} target="_blank" rel="noreferrer">GitHub</a>}
-                {p.repo && p.site && " · "}
-                {p.site && <a href={p.site} target="_blank" rel="noreferrer">{p.site.replace(/^https?:\/\//, "")}</a>}
-              </dd></div>
+          <div className="rail-stick">
+            <dl className="fields">
+              <div><dt>Stack</dt><dd>{p.stack.join(" · ")}</dd></div>
+              {(p.repo || p.site) && (
+                <div><dt>Links</dt><dd>
+                  {p.repo && <a href={`https://github.com/${p.repo}`} target="_blank" rel="noreferrer">GitHub</a>}
+                  {p.repo && p.site && " · "}
+                  {p.site && <a href={p.site} target="_blank" rel="noreferrer">{p.site.replace(/^https?:\/\//, "")}</a>}
+                </dd></div>
+              )}
+              {roadmap?.status && <div><dt>Status</dt><dd>{roadmap.status}</dd></div>}
+            </dl>
+            {roadmap && roadmap.total > 0 && (
+              <section className="roadmap" aria-labelledby="roadmap-h">
+                <h2 id="roadmap-h">Roadmap <TickRule done={roadmap.done} total={roadmap.total} /></h2>
+                <ul>
+                  {todo.map((i) => <li key={i.text}>{i.text}</li>)}
+                  {done.map((i) => <li key={i.text} data-done>{i.text}</li>)}
+                </ul>
+              </section>
             )}
-            {roadmap?.status && <div><dt>Status</dt><dd>{roadmap.status}</dd></div>}
-          </dl>
-          {roadmap && roadmap.total > 0 && (
-            <section className="roadmap">
-              <h2>Roadmap <TickRule done={roadmap.done} total={roadmap.total} /></h2>
-              <ul>
-                {todo.map((i) => <li key={i.text}>{i.text}</li>)}
-                {done.map((i) => <li key={i.text} data-done>{i.text}</li>)}
-              </ul>
-            </section>
-          )}
+          </div>
         </aside>
       </div>
+
+      <nav className="entry-nav" aria-label="Other entries">
+        <Link href={`/work/${prev.slug}`} rel="prev"><span>Previous</span><strong>{prev.title}</strong></Link>
+        <Link href={`/work/${next.slug}`} rel="next"><span>Next</span><strong>{next.title}</strong></Link>
+      </nav>
     </article>
   );
 }

@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
 import { VisitPing } from "@/components/VisitPing";
@@ -14,6 +14,11 @@ const plexMono = IBM_Plex_Mono({
 export const metadata: Metadata = {
   title: "kjel.me",
   description: "Kjel Schlemmer. A personal site rendered as a flip-dot sign.",
+};
+
+export const viewport: Viewport = {
+  themeColor: "#0a0a0a",
+  colorScheme: "dark",
 };
 
 // The board lives here, above every route, so it persists across navigation:

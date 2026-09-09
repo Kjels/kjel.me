@@ -112,6 +112,7 @@ export function BoardShell({ text, children }: { text?: BoardText; children: Rea
 
   return (
     <>
+      <a href="#main" className="skip">Skip to content</a>
       <canvas
         ref={canvasRef}
         className="fd-canvas"
@@ -122,7 +123,7 @@ export function BoardShell({ text, children }: { text?: BoardText; children: Rea
           : "kjel.me masthead, a flip-dot strip with the clock and navigation."}
       />
       <div ref={hotsRef} />
-      <main className="fd-main" hidden={mode === "full"} key={pathname}>
+      <main id="main" className="fd-main" hidden={mode === "full"} key={pathname} tabIndex={-1}>
         {children}
       </main>
     </>

@@ -408,8 +408,8 @@ export class Board {
     this.offLayer.width = this.canvas.width; this.offLayer.height = this.canvas.height;
     const octx = this.offLayer.getContext("2d")!;
     octx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    if (this.opts.grid === false) { octx.clearRect(0, 0, W, H); return; } // gridless boards are transparent
     octx.fillStyle = BG; octx.fillRect(0, 0, W, H);
-    if (this.opts.grid === false) return;
     octx.fillStyle = OFF;
     for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) {
       octx.beginPath();
@@ -463,7 +463,8 @@ export class Board {
     this.blank = true;
     // resizing the backing store cleared the canvas; show the off grid now
     // rather than waiting a frame, so the sign never flashes flat
-    this.ctx.drawImage(this.offLayer, 0, 0, this.W, this.H);
+    if (this.opts.grid !== false) this.ctx.drawImage(this.offLayer, 0, 0, this.W, this.H);
+    else this.ctx.clearRect(0, 0, this.W, this.H);
   }
 
   start() {
@@ -481,13 +482,15 @@ export class Board {
   private frame = (ms: number) => {
     const t = ms / 1000;
     const { ctx, cols, rows, cw, chh, W, H, reduced } = this;
+    const grid = this.opts.grid !== false;
     if (!this.blank) this.opts.tick?.(this, t);
 
     const inTrans = this.transStart >= 0 && t - this.transStart < TRANS;
     if (this.transStart >= 0 && !inTrans) { this.transStart = -1; this.prevLum = null; this.prevMask = null; }
     const sweep = inTrans ? easeInOut((t - this.transStart) / TRANS) * (cols + 10) : 0;
 
-    ctx.drawImage(this.offLayer, 0, 0, W, H);
+    if (grid) ctx.drawImage(this.offLayer, 0, 0, W, H);
+    else ctx.clearRect(0, 0, W, H);
 
     const { mx, my } = this;
     const trailV = this.trailV, cursorMode = this.cursorMode;
@@ -511,7 +514,7 @@ export class Board {
     this.pmx = mx; this.pmy = my;
 
     const CL = this.cellLum!, TM = this.textMask!;
-    const grid = this.opts.grid !== false, heatPal = grid ? HEAT : HEAT_FREE;
+    const heatPal = grid ? HEAT : HEAT_FREE;
     const prevLum = this.prevLum, prevMask = this.prevMask;
     const slashParam = this.slashParam, slashD = this.slashD, faceBox = this.faceBox, guideOK = this.guideOK;
     const layers = this.layers, nL = layers.length;
@@ -561,8 +564,8 @@ export class Board {
       if (v <= 0.04) {
         // afterglow: thermal mass, the dot cools instead of snapping cold
         if (!reduced && heat[i] > 0.02) {
-          ctx.fillStyle = BG;
-          ctx.fillRect(x * cw - 0.5, y * chh - 0.5, cw + 1, chh + 1);
+          if (grid) { ctx.fillStyle = BG; ctx.fillRect(x * cw - 0.5, y * chh - 0.5, cw + 1, chh + 1); }
+          else ctx.clearRect(x * cw - 0.5, y * chh - 0.5, cw + 1, chh + 1);
           ctx.fillStyle = heatPal[Math.min(7, (heat[i] * 8) | 0)];
           ctx.beginPath();
           ctx.ellipse(x * cw + cw / 2, y * chh + chh / 2, cw * 0.42, chh * 0.42, 0, 0, Math.PI * 2);
@@ -570,8 +573,8 @@ export class Board {
         }
         continue;
       }
-      ctx.fillStyle = BG;
-      ctx.fillRect(x * cw - 0.5, y * chh - 0.5, cw + 1, chh + 1);
+      if (grid) { ctx.fillStyle = BG; ctx.fillRect(x * cw - 0.5, y * chh - 0.5, cw + 1, chh + 1); }
+      else ctx.clearRect(x * cw - 0.5, y * chh - 0.5, cw + 1, chh + 1);
       const sx = Math.abs(2 * v - 1);
       if (sx < 0.03) continue;
       if (!grid && v <= 0.5) continue; // no unlit face to show
