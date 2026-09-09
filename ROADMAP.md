@@ -39,7 +39,12 @@ Ordered by value. Checked items are done.
 - [ ] **Photos for KIMS** and any other project page that needs them
 - [x] **Landing.** Live line (what the ledger is building, last push), menu previews on hover, idle wave using the second portrait, now-playing in the strip
 - [x] **The landing scrolls.** A board taller than the screen: home, then WORK as a ledger, then ABOUT, all in dots, stepping a row at a time with dot state carried along so only the leading edge flips. Menu words scroll to sections. `?scroll=snap` for detents
-- [ ] **Retire `/work` and `/about` routes** now that the ledger and about live on the landing, or keep them as the HTML deep versions. Decide
+- [x] **Entries are boards.** Name, live lifeform, meta, one-liner, short lines, roadmap ticks, README / SITE / ALL WORK. `/work` and `/about` redirect into the landing. Links ripple on hover and press
+- [ ] Strip ticker: the latest commit message crawling across the pinned line
+- [ ] Arrow keys step the landing one row; space pages
+- [ ] 404 as a board
+- [ ] Drag to flip dots on the landing, healing after a moment
+- [ ] Optional relay click per flip, off by default
 - [x] Landing carries its copy as visually-hidden HTML
 - [ ] Pictogram boards pause offscreen and in hidden tabs (done); consider the same for the landing board
 - [ ] **Extract the engine** (`components/board/`) as a standalone package with a demo page. The `Board` class already has the API; it needs a build and a README
