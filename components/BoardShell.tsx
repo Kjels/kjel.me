@@ -7,7 +7,9 @@ import { Board } from "./board/engine";
 import { createKjelScene, NAV, STRIP_ROWS, STRIP_H, ROUTES, SCREENS, entryLink, sectionFor, type Live } from "./board/scenes/kjel";
 
 type Mode = "full" | "strip";
-const modeFor = (path: string): Mode => (path === "/" ? "full" : "strip");
+// the landing and the entries are boards; everything else (config) sits under the strip
+const modeFor = (path: string): Mode => (path === "/" || path.startsWith("/work/") ? "full" : "strip");
+const pageFor = (path: string) => (path === "/" ? "HOME" : path.startsWith("/work/") ? "ENTRY:" + path.split("/")[2] : "STRIP:" + sectionFor(path));
 
 // One board for the whole site. On "/" it fills the viewport; on every other
 // route it is the masthead strip and the HTML content sits beneath it.
@@ -54,21 +56,30 @@ export function BoardShell({ text, live, children }: { text?: BoardText; live?: 
         return modeRef.current === "full" ? scene.rows(W, H) : STRIP_ROWS;
       },
       // the landing is three screens tall; every other page is exactly the strip
-      virtualRows: (rows, cols) => (modeRef.current === "full" && !transitRef.current ? scene.height(rows, cols) : rows),
+      // only the landing is tall
+      virtualRows: (rows, cols) => {
+        if (modeRef.current !== "full" || transitRef.current) return rows;
+        const path = pathRef.current;
+        if (path === "/") return scene.height(rows, cols);
+        if (path.startsWith("/work/")) return scene.entryHeight(rows, cols, path.split("/")[2]);
+        return rows;
+      },
       scrollOffset: () => window.scrollY,
       onFit: (b) => setDocHeight(b.vrows > b.rows ? Math.round(b.vrows * b.chh) : 0),
-      compose: (b) => scene.compose(b, modeRef.current === "full" ? "HOME" : "STRIP:" + sectionFor(pathRef.current)),
+      compose: (b) => scene.compose(b, modeRef.current === "full" ? pageFor(pathRef.current) : "STRIP:" + sectionFor(pathRef.current)),
       tick: scene.tick,
       external: scene.external,
       routes,
       onRoute: (path) => {
         // on the landing, WORK and ABOUT are sections of the board: scroll to them
-        if (modeRef.current === "full") {
+        if (pathRef.current === "/") {
           const S = scene.sections(board.rows, board.cols);
           const row = path === "/" ? S.HOME : path === "/work" ? S.WORK : path === "/about" ? S.ABOUT : -1;
           if (row >= 0) { window.scrollTo({ top: row * board.chh, behavior: board.reduced ? "auto" : "smooth" }); return; }
         }
         if (path === pathRef.current) return;
+        // board to board: just change route, the page effect flips the sign. board to page: wipe first
+        if (modeFor(path) === "full" && modeRef.current === "full") { router.push(path.replace(/^\/(work|about)$/, "/#$1")); return; }
         board.wipeOut().then(() => router.push(path));
       },
     });
@@ -76,9 +87,19 @@ export function BoardShell({ text, live, children }: { text?: BoardText; live?: 
     board.resize();
     scene.load(board);
     board.start();
+    // /#work and /#about land on their sections
+    const toHash = () => {
+      if (pathRef.current !== "/") return;
+      const h = location.hash.slice(1).toUpperCase();
+      const S = scene.sections(board.rows, board.cols) as Record<string, number>;
+      if (h in S) window.scrollTo({ top: S[h] * board.chh, behavior: "auto" });
+    };
+    toHash();
+    window.addEventListener("hashchange", toHash);
     // enable the height transition only after first paint
     const raf = requestAnimationFrame(() => setReady(true));
     return () => {
+      window.removeEventListener("hashchange", toHash);
       cancelAnimationFrame(raf);
       board.destroy();
       scene.destroy();
@@ -101,8 +122,9 @@ export function BoardShell({ text, live, children }: { text?: BoardText; live?: 
     const canvas = canvasRef.current;
     if (!board || !canvas) return;
     if (next === modeRef.current) {
-      // same shape, different section (strip → strip): just recompose with a wipe
-      if (next === "strip") { board.compose(); board.boot(); }
+      // same shape, different page: rebuild (the landing is tall, an entry is not) and deal it in
+      window.scrollTo(0, 0);
+      board.resize(); board.boot();
       return;
     }
     modeRef.current = next;

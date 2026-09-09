@@ -9,7 +9,7 @@ import { ON, OFF, BG, HEAT, HEAT_FREE } from "./palette";
 import { hash2, easeInOut, rasterToCells } from "./raster";
 import { PW, PH } from "./portrait";
 
-export type LinkRec = { page: string; col: number; row: number; scale: number; wCols: number; gh: number; hover: boolean; hoverP: number };
+export type LinkRec = { page: string; col: number; row: number; scale: number; wCols: number; gh: number; hover: boolean; hoverP: number; since?: number; pinned?: boolean };
 /** a dynamic dot layer: mask cells force a lit dot, halo cells force a dark one under raster content */
 export type Layer = { mask: Uint8Array; halo: Uint8Array | null; key: string };
 /** a coloured overlay drawn on top of the dots, faded in and out by `on` */
@@ -44,6 +44,10 @@ export type BoardOptions = {
   scrollOffset?: () => number;
   /** called after every fit, e.g. to size the page to the virtual board */
   onFit?: (b: Board) => void;
+  /** the unlit grid thins out over this many rows at the bottom: a board dissolving into the page */
+  fadeBottom?: number;
+  /** "absolute": hotspots are positioned inside the hots element (an inline board); default fixed/document */
+  hotsMode?: "absolute";
 };
 
 const HELV = '"Helvetica Neue", Helvetica, Arial, sans-serif';
@@ -214,10 +218,12 @@ export class Board {
       const a = this.hotAt(col * cw + (wCols * cw) / 2 - hw / 2, row * chh + (gh * scale * chh) / 2 - hh2 / 2, hw, hh2,
         link.toLowerCase(), fn, ext || route);
       if (ext && !ext.startsWith("mailto:")) { a.target = "_blank"; a.rel = "noreferrer"; }
-      a.addEventListener("mouseenter", () => { rec.hover = true; });
+      const touch = () => { rec.since = performance.now() / 1000; };
+      a.addEventListener("mouseenter", () => { rec.hover = true; touch(); });
       a.addEventListener("mouseleave", () => { rec.hover = false; });
-      a.addEventListener("focus", () => { rec.hover = true; });
+      a.addEventListener("focus", () => { rec.hover = true; touch(); });
       a.addEventListener("blur", () => { rec.hover = false; });
+      a.addEventListener("pointerdown", touch);
     }
     return wCols;
   }
@@ -281,7 +287,7 @@ export class Board {
     const a = document.createElement("a");
     a.className = "fd-hot";
     // on a virtual board hotspots live in the document and scroll with it; pinned ones stay on screen
-    a.style.position = this.pinHots || this.vrows === this.rows ? "fixed" : "absolute";
+    a.style.position = this.opts.hotsMode === "absolute" ? "absolute" : this.pinHots || this.vrows === this.rows ? "fixed" : "absolute";
     // never past the board's edge: an overflowing hotspot would widen the page on phones
     if (xs < 0) { ws += xs; xs = 0; }
     ws = Math.max(0, Math.min(ws, this.W - xs));
@@ -302,7 +308,7 @@ export class Board {
     const { cw, chh } = this;
     this.stampInto(L.mask, text, col, row, 1, micro);
     const gh = micro ? 5 : 7, wCols = micro ? measureM(text) : measureCols(text);
-    const rec: LinkRec = { page: "PIN:" + link, col, row, scale: 1, wCols, gh, hover: false, hoverP: 0 };
+    const rec: LinkRec = { page: "PIN:" + link, col, row, scale: 1, wCols, gh, hover: false, hoverP: 0, pinned: true };
     this.extraLinks = this.extraLinks.filter((l) => l.page !== rec.page);
     this.extraLinks.push(rec);
     const ext = this.opts.external?.[link], route = this.opts.routes?.[link];
@@ -312,10 +318,12 @@ export class Board {
     const a = this.hotAt(col * cw + (wCols * cw) / 2 - hw / 2, row * chh + (gh * chh) / 2 - hh2 / 2, hw, hh2, link.toLowerCase(), fn, ext || route);
     this.pinHots = was;
     if (ext && !ext.startsWith("mailto:")) { a.target = "_blank"; a.rel = "noreferrer"; }
-    a.addEventListener("mouseenter", () => { rec.hover = true; });
+    const touch = () => { rec.since = performance.now() / 1000; };
+    a.addEventListener("mouseenter", () => { rec.hover = true; touch(); });
     a.addEventListener("mouseleave", () => { rec.hover = false; });
-    a.addEventListener("focus", () => { rec.hover = true; });
+    a.addEventListener("focus", () => { rec.hover = true; touch(); });
     a.addEventListener("blur", () => { rec.hover = false; });
+    a.addEventListener("pointerdown", touch);
     return wCols;
   }
 
@@ -461,7 +469,10 @@ export class Board {
     if (this.opts.grid === false) { octx.clearRect(0, 0, W, H); return; } // gridless boards are transparent
     octx.fillStyle = BG; octx.fillRect(0, 0, W, H);
     octx.fillStyle = OFF;
+    const fade = this.opts.fadeBottom ?? 0;
     for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) {
+      // the bottom rows thin out: a dithered edge where the board gives way to the page
+      if (fade && y > rows - fade && hash2(x, y) < (y - (rows - fade)) / fade) continue;
       octx.beginPath();
       octx.ellipse(x * cw + cw / 2, y * chh + chh / 2, cw * 0.42, chh * 0.42, 0, 0, Math.PI * 2);
       octx.fill();
@@ -579,6 +590,15 @@ export class Board {
     const slashParam = this.slashParam, slashD = this.slashD, faceBox = this.faceBox, guideOK = this.guideOK;
     const layers = this.layers, nL = layers.length;
     const dotV = this.dotV, heat = this.heat;
+    // links touched in the last moment ripple: an inverted band sweeps through the word's dots
+    const RIP = 0.5;
+    const ripples: { x0: number; x1: number; y0: number; y1: number; p: number; pinned: boolean }[] = [];
+    if (!reduced) for (const l of this.links.length + this.extraLinks.length ? [...this.links, ...this.extraLinks] : []) {
+      if (l.since === undefined) continue;
+      const age = t - l.since;
+      if (age < 0 || age > RIP) continue;
+      ripples.push({ x0: l.col, x1: l.col + l.wCols, y0: l.row, y1: l.row + l.gh * l.scale, p: age / RIP, pinned: !!l.pinned });
+    }
     // a virtual board: the screen is a window `off` rows down the composition, moved a whole row at a time
     if (this.vrows > rows && this.opts.scrollOffset) this.winRow = Math.max(0, Math.min(this.vrows - rows, Math.floor(this.opts.scrollOffset() / chh)));
     else this.winRow = 0;
@@ -631,6 +651,12 @@ export class Board {
       if (!reduced && cursorMode === 2 && m === 0 && guideOK && guideOK[vi] && mx > -9999 &&
           (x === curCol || y === curRow) && (x + y) % 3 === 0) {
         target = 1;
+      }
+      for (let r = 0; r < ripples.length; r++) {
+        const rp = ripples[r], ry = rp.pinned ? y : vy;
+        if (x < rp.x0 || x >= rp.x1 || ry < rp.y0 || ry >= rp.y1) continue;
+        const span = rp.x1 - rp.x0 + 4, head = rp.p * span, u = x - rp.x0 + hash2(x, ry) * 2;
+        if (u < head && u > head - span * 0.3) target = 1 - target;
       }
       const pv = dotV[i];
       dotV[i] += (target - dotV[i]) * (reduced ? 1 : 0.38);

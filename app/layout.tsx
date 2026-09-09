@@ -5,19 +5,27 @@ import { VisitPing } from "@/components/VisitPing";
 import { BoardShell } from "@/components/BoardShell";
 import { getBoardText } from "@/lib/board";
 import { PROJECTS, VERB } from "@/content/work";
-import { fetchRepo, ago } from "@/lib/github";
+import { fetchRepo, fetchRoadmap, fetchCommitCount, ago, gen } from "@/lib/github";
 import type { Live } from "@/components/board/scenes/kjel";
 
 // what the landing says about the ledger: the most recently pushed project
 async function getLive(): Promise<Live> {
-  const withRepo = PROJECTS.filter((p) => p.repo);
-  const repos = await Promise.all(withRepo.map((p) => fetchRepo(p.repo!)));
+  const data = await Promise.all(PROJECTS.map(async (p) => {
+    const [repo, roadmap, commits] = p.repo ? await Promise.all([fetchRepo(p.repo), fetchRoadmap(p.repo), fetchCommitCount(p.repo)]) : [null, null, null];
+    return { p, repo, roadmap, commits };
+  }));
   let best = -1, when = "";
-  repos.forEach((r, i) => { if (r && r.pushedAt > when) { when = r.pushedAt; best = i; } });
-  const building = best >= 0 ? withRepo[best].title.toUpperCase() : (PROJECTS.find((p) => p.status === "building")?.title.toUpperCase() ?? "");
+  data.forEach((d, i) => { if (d.repo && d.repo.pushedAt > when) { when = d.repo.pushedAt; best = i; } });
+  const building = best >= 0 ? data[best].p.title.toUpperCase() : (PROJECTS.find((p) => p.status === "building")?.title.toUpperCase() ?? "");
   return {
     building, pushed: when ? ago(when).toUpperCase() : "", entries: PROJECTS.length, place: "BROOKLYN, NY",
-    ledger: PROJECTS.map((p) => ({ slug: p.slug, title: p.title, state: VERB[p.status], since: p.started })),
+    ledger: data.map(({ p, repo, roadmap, commits }) => ({
+      slug: p.slug, title: p.title, state: VERB[p.status], since: p.started, blurb: p.blurb, lines: p.lines,
+      repo: p.repo, site: p.site,
+      gen: commits != null ? gen(commits) : null,
+      pushed: repo ? ago(repo.pushedAt).toUpperCase() : null,
+      roadmap: roadmap ? { done: roadmap.done, total: roadmap.total } : null,
+    })),
   };
 }
 

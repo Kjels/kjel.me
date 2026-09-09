@@ -10,8 +10,11 @@ import { DS, measureCols, measureM, wrap, wrapM, fit } from "../font";
 import { loadPortrait } from "../portrait";
 import { SEEDS } from "../pictos";
 
-/** one line of the ledger, as the landing shows it */
-export type Entry = { slug: string; title: string; state: string; since: string };
+/** one project, as the board shows it: a ledger line on the landing, a page of its own */
+export type Entry = {
+  slug: string; title: string; state: string; since: string; blurb: string; lines: string[];
+  repo?: string; site?: string; gen?: string | null; pushed?: string | null; roadmap?: { done: number; total: number } | null;
+};
 /** what the ledger knows right now, for the landing's live line, menu previews and the in-board ledger */
 export type Live = { building: string; pushed: string; entries: number; place: string; ledger: Entry[] };
 
@@ -209,7 +212,7 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
   function updateClock(b: Board, t: number) {
     const L = (clock ??= b.layer());
     const { cols, rows, wide, reduced } = b;
-    const scrolled = b.winRow > Math.round(rows * 0.3);
+    const scrolled = b.winRow > Math.round(rows * 0.3) || current.startsWith("ENTRY:");
     const home = current === "HOME" && !scrolled;
     const fi = reduced ? 0 : Math.floor(t / 2.8) % ROLES.length;
     const key = current + "|" + (scrolled ? "s" : "h") + "|" + ((Date.now() / 1000) | 0) + "|" + fi + "|" + nowTitle;
@@ -223,7 +226,7 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
       clearNowHot(b); // the announcement lives on home only
       // the strip, or the scrolled landing: a small clock on the top line, colon beating;
       // dropped when the mark and the menu leave it no room (phones)
-      const row = current === "HOME" ? 3 : Math.round((rows - 5) / 2);
+      const row = current === "HOME" || current.startsWith("ENTRY:") ? 3 : Math.round((rows - 5) / 2);
       const w = measureM(hhs) + 2 + measureM(":") + 2 + measureM(mms);
       const navW = NAV.reduce((s, wd) => s + measureM(wd) + 6, 0) - 6;
       if (cols / 2 - w / 2 - 8 < 3 + measureM("KJEL.") || cols / 2 + w / 2 + 8 > cols - 3 - navW) { L.halo = null; return; }
@@ -481,11 +484,110 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
     }
   }
 
+  /* ---------- an entry: one screen for one project ---------- */
+  let lifeL: Layer | null = null, lifeCells: Uint8Array | null = null, lifeAt = 0, lifeSlug = "";
+  const LN = 11;
+  function updateLife(b: Board, t: number) {
+    if (!current.startsWith("ENTRY:") || !b.wide) { if (lifeL && lifeL.key !== "off") { lifeL.key = "off"; lifeL.mask.fill(0); } return; }
+    const L = (lifeL ??= b.layer());
+    const slug = current.slice(6), seed = SEEDS[slug];
+    if (!seed) return;
+    if (lifeSlug !== slug || !lifeCells) {
+      lifeCells = new Uint8Array(LN * LN); lifeSlug = slug; lifeAt = Math.floor(t / 0.8);
+      const oy = Math.floor((LN - seed.length) / 2), ox = Math.floor((LN - seed[0].length) / 2);
+      seed.forEach((r, y) => [...r].forEach((ch, x) => { if (ch === "1") lifeCells![(oy + y) * LN + ox + x] = 1; }));
+    }
+    const g = Math.floor(t / 0.8);
+    while (lifeAt < g) {
+      const nb = new Uint8Array(LN * LN);
+      for (let y = 0; y < LN; y++) for (let x = 0; x < LN; x++) { let n = 0; for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { if (!dx && !dy) continue; n += lifeCells[((y + dy + LN) % LN) * LN + ((x + dx + LN) % LN)]; } nb[y * LN + x] = (lifeCells[y * LN + x] ? n === 2 || n === 3 : n === 3) ? 1 : 0; }
+      lifeCells = nb; lifeAt++;
+    }
+    const key = slug + "|" + g + "|" + b.cols;
+    if (key === L.key) return;
+    L.key = key; L.mask.fill(0);
+    // the lifeform lives where the portrait does on the landing, in 3x3 blocks
+    const { cols, rows, wide } = b, sc = wide ? 5 : 3;
+    const ox = wide ? Math.round(cols * 0.78) - Math.floor(LN * sc / 2) : Math.round(cols / 2) - Math.floor(LN * sc / 2);
+    const oy = wide ? Math.round(rows * 0.4) - Math.floor(LN * sc / 2) : rows - 16 - LN * sc;
+    for (let y = 0; y < LN; y++) for (let x = 0; x < LN; x++) if (lifeCells[y * LN + x])
+      for (let dy = 0; dy < sc - 1; dy++) for (let dx = 0; dx < sc - 1; dx++) { const xx = ox + x * sc + dx, yy = oy + y * sc + dy; if (xx >= 0 && xx < cols && yy >= 0 && yy < rows) L.mask[yy * cols + xx] = 1; }
+  }
+
+  /** the entry's layout, so its height is known before compose: rows for each part */
+  function entryLayout(rows: number, cols: number, e: Entry) {
+    const wide = cols / rows > 1.05;
+    const colL = wide ? Math.round(cols * 0.06) : 3, sc = wide ? 3 : 2;
+    const measure = wide ? Math.round(cols * 0.6) : cols - 6;
+    const title = wrap(e.title.toUpperCase(), sc, wide ? Math.round(cols * 0.6) : cols - 6);
+    const blurb = wrap(e.blurb.toUpperCase(), 1, wide ? Math.round(cols * 0.66) : measure);
+    const fun = e.lines.flatMap((l) => wrapM(l, measure));
+    const metaText = [e.state, "SINCE " + e.since, e.gen, e.pushed ? "PUSHED " + e.pushed : null].filter(Boolean).join("  ");
+    const meta = wrapM(metaText, measure);
+    let y = wide ? Math.round(rows * 0.1) : 30;
+    const yTitle = y; y += title.length * (sc * 7 + 4) + 6;
+    const yMeta = y; y += meta.length * 8 + 6;
+    const yBlurb = y; y += blurb.length * 9 + 6;
+    const yFun = y; y += fun.length * 8 + 10;
+    const yLinks = y; y += 7 + 14;
+    return { wide, colL, sc, measure, title, blurb, fun, meta, yTitle, yMeta, yBlurb, yFun, yLinks, height: y };
+  }
+
+  function composeEntry(b: Board, slug: string) {
+    const { cols, rows, wide } = b;
+    const e = live?.ledger.find((x) => x.slug === slug);
+    // the pinned line: a small mark home, the menu
+    const P = (pins ??= b.layer());
+    P.mask.fill(0); P.key = "pins";
+    b.extraLinks = b.extraLinks.filter((l) => !l.page.startsWith("PIN:"));
+    b.pinnedRows = wide ? 12 : 22;
+    {
+      const right = wide ? Math.round(cols * 0.94) : cols - 3, gap = 6;
+      const total = NAV.reduce((s, w) => s + measureM(w) + gap, 0) - gap;
+      let nx = wide ? right - total : 3; const ny = wide ? 3 : 13;
+      b.pinLink(P, "KJEL.", 3, 3, true, "HOME");
+      for (const wd of NAV) { b.pinLink(P, wd, nx, ny, true, wd); nx += measureM(wd) + gap; }
+      bandHalo(b, P, b.pinnedRows);
+    }
+    if (!e) { b.stamp("NOTHING HERE", 3, Math.round(rows * 0.4), 2); return; }
+    const L = entryLayout(rows, cols, e);
+    const { colL, sc } = L;
+    let y = L.yTitle;
+    // the name
+    for (const line of L.title) { b.stamp(line, colL, y, sc, undefined, false, true); y += sc * 7 + 4; }
+    // the meta line, wrapped when the board is narrow
+    y = L.yMeta; for (const m of L.meta) { b.stamp(m, colL, y, 1, undefined, true); y += 8; }
+    // the one-liner
+    y = L.yBlurb; for (const line of L.blurb) { b.stamp(line, colL, y, 1); y += 9; }
+    // the short lines, in the small face
+    y = L.yFun; for (const l of L.fun) { b.stamp(l, colL, y, 1, undefined, true); y += 8; }
+    // on narrow boards the lifeform is still, top right beside a one-line title
+    if (!wide && L.title.length === 1) {
+      const seed = SEEDS[slug], tw = measureCols(L.title[0]) * sc;
+      if (seed && colL + tw + 4 + seed[0].length * 2 <= cols - 3) for (let r = 0; r < seed.length; r++) for (let c = 0; c < seed[r].length; c++) if (seed[r][c] === "1") b.block(cols - 3 - (seed[r].length - c) * 2, L.yTitle + r * 2, 2, 2);
+    }
+    // links follow the text
+    const ly = L.yLinks; let lx = colL;
+    if (e.repo) { b.stamp("README", lx, ly, 1, "README", true, true); lx += measureM("README") + 8; }
+    if (e.site) { b.stamp("SITE", lx, ly, 1, "SITE", true, true); lx += measureM("SITE") + 8; }
+    b.stamp("ALL WORK", lx, ly, 1, "WORK", true, true);
+    // the roadmap as ticks under the lifeform: done are blocks, open are single dots
+    if (e.roadmap && e.roadmap.total && wide) {
+      const n = e.roadmap.total, tw = n * 4 - 2, tx = Math.round(cols * 0.78) - Math.floor(tw / 2), ty = Math.round(rows * 0.4) + Math.floor(LN * 5 / 2) + 8;
+      for (let i = 0; i < n; i++) { const x = tx + i * 4; if (x < 0 || x + 2 > cols) continue; if (i < e.roadmap.done) b.block(x, ty, 2, 2); else b.block(x, ty + 1, 1, 1); }
+      const lbl = `${String(e.roadmap.done).padStart(2, "0")}/${String(e.roadmap.total).padStart(2, "0")}`;
+      b.stamp(lbl, Math.round(cols * 0.78) - Math.floor(measureM(lbl) / 2), ty + 6, 1, undefined, true);
+    }
+    external.README = e.repo ? `https://github.com/${e.repo}#readme` : "";
+    external.SITE = e.site || "";
+  }
+
   function compose(b: Board, page: string) {
     current = page;
     b.fx = laser;
     if (page !== "HOME") { laser.on = false; laser.p = 0; laser.mask = null; }
     if (page === "HOME") composeHome(b);
+    else if (page.startsWith("ENTRY:")) composeEntry(b, page.slice(6));
     else composeStrip(b, page.split(":")[1] || "");
   }
 
@@ -539,6 +641,7 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
     updatePreview(b);
     updateIdle(b, t);
     updateMark(b);
+    updateLife(b, t);
   }
 
   /** fetch the portrait, then recompose and deal the board in */
@@ -561,6 +664,9 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
     rows: (W: number, H: number) => (W / H > 1.05 ? 141 : 153),
     /** total rows of the tall landing: home, the ledger, then what about needs */
     height: (rows: number, cols: number) => sectionRows(rows, cols, (live?.ledger ?? []).length).ABOUT + Math.max(rows, aboutRows(cols, cols / rows > 1.05)),
+    isHome: () => current === "HOME",
+    /** rows an entry needs: at least a screen, more if the text runs long */
+    entryHeight: (rows: number, cols: number, slug: string) => { const e = live?.ledger.find((x) => x.slug === slug); return e ? Math.max(rows, entryLayout(rows, cols, e).height) : rows; },
     sections: (rows: number, cols: number) => sectionRows(rows, cols, (live?.ledger ?? []).length),
   };
 }

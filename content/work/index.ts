@@ -19,6 +19,8 @@ export type Project = {
   site?: string;
   started: string; // YYYY-MM
   stack: string[];
+  /** two or three short lines for the board. the long version lives in the repo's README */
+  lines: string[];
   body: () => Promise<{ default: React.ComponentType }>;
 };
 
@@ -31,6 +33,7 @@ export const PROJECTS: Project[] = [
     repo: "Kjels/kims",
     started: "2026-08",
     stack: ["Raspberry Pi 4", "HX711 load cell", "Python", "vanilla JS", "OpenSCAD"],
+    lines: ["A SCALE WITH OPINIONS.", "PUT THE BOWL DOWN. TAP. DONE.", "THE PANTRY KEEPS ITSELF."],
     body: () => import("./kims.mdx"),
   },
   {
@@ -42,6 +45,7 @@ export const PROJECTS: Project[] = [
     site: "https://kjel.me",
     started: "2026-08",
     stack: ["Next.js", "Canvas 2D", "Vercel"],
+    lines: ["YOU ARE LOOKING AT IT.", "141 ROWS. NO PIXELS.", "THE CYCLIST IS NOT FOR SALE."],
     body: () => import("./kjel-me.mdx"),
   },
   {
@@ -52,6 +56,7 @@ export const PROJECTS: Project[] = [
     repo: "Kjels/harness",
     started: "2026-07",
     stack: ["Node", "tmux", "git"],
+    lines: ["CLAUDE, IN A TMUX PANE.", "ONE SESSION, TWO MACHINES.", "GIT IS THE MEMORY."],
     body: () => import("./harness.mdx"),
   },
   {
@@ -62,6 +67,7 @@ export const PROJECTS: Project[] = [
     repo: "Kjels/capture",
     started: "2026-05",
     stack: ["Next.js", "Supabase", "Claude", "Swift"],
+    lines: ["BRAINDUMP IN. TODOS OUT.", "NO CHAT. NO QUESTIONS.", "NOTHING IS EVER DROPPED."],
     body: () => import("./capture.mdx"),
   },
   {
@@ -72,6 +78,7 @@ export const PROJECTS: Project[] = [
     repo: "Kjels/sprint-orchestrator",
     started: "2026-04",
     stack: ["Python", "Claude Agent SDK", "FastAPI", "React"],
+    lines: ["A SPRINT IS A FOLDER.", "AGENTS IN WAVES.", "A HUMAN AT THE GATES."],
     body: () => import("./sprint-orchestrator.mdx"),
   },
 ];
