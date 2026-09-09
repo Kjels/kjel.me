@@ -25,6 +25,11 @@ export function BoardShell({ text, live, children }: { text?: BoardText; live?: 
   const modeRef = useRef<Mode>(modeFor(pathname));
   const pathRef = useRef(pathname);
   const transitRef = useRef(false);
+  // scroll position per path, so Back returns you to where you were on the board
+  const posRef = useRef<Record<string, number>>({});
+  const popRef = useRef(false);
+  // a scroll to apply once the page has its height (the spacer is sized after fit)
+  const pendingRef = useRef<number | null>(null);
   const textRef = useRef(text);
   const liveRef = useRef(live);
   const [mode, setMode] = useState<Mode>(modeFor(pathname));
@@ -35,6 +40,13 @@ export function BoardShell({ text, live, children }: { text?: BoardText; live?: 
 
   useEffect(() => { textRef.current = text; }, [text]);
   useEffect(() => { pathRef.current = pathname; }, [pathname]);
+  useEffect(() => {
+    const onScroll = () => { posRef.current[pathRef.current] = window.scrollY; };
+    const onPop = () => { popRef.current = true; };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("popstate", onPop);
+    return () => { window.removeEventListener("scroll", onScroll); window.removeEventListener("popstate", onPop); };
+  }, []);
 
   // build the board once
   useEffect(() => {
@@ -79,22 +91,22 @@ export function BoardShell({ text, live, children }: { text?: BoardText; live?: 
         }
         if (path === pathRef.current) return;
         // board to board: just change route, the page effect flips the sign. board to page: wipe first
-        if (modeFor(path) === "full" && modeRef.current === "full") { router.push(path.replace(/^\/(work|about)$/, "/#$1")); return; }
-        board.wipeOut().then(() => router.push(path));
+        if (modeFor(path) === "full" && modeRef.current === "full") { router.push(path.replace(/^\/(work|about)$/, "/#$1"), { scroll: false }); return; }
+        board.wipeOut().then(() => router.push(path, { scroll: false }));
       },
     });
     boardRef.current = board;
     board.resize();
     scene.load(board);
     board.start();
-    // /#work and /#about land on their sections
+    // /#work and /#about land on their sections, once the page has its height
     const toHash = () => {
       if (pathRef.current !== "/") return;
       const h = location.hash.slice(1).toUpperCase();
       const S = scene.sections(board.rows, board.cols) as Record<string, number>;
-      if (h in S) window.scrollTo({ top: S[h] * board.chh, behavior: "auto" });
+      if (h in S) pendingRef.current = S[h] * board.chh;
     };
-    toHash();
+    if (location.hash) toHash(); else pendingRef.current = null;
     window.addEventListener("hashchange", toHash);
     // enable the height transition only after first paint
     const raf = requestAnimationFrame(() => setReady(true));
@@ -111,9 +123,22 @@ export function BoardShell({ text, live, children }: { text?: BoardText; live?: 
   // the landing scrolls its own tall board; snap mode settles on whole screens
   useEffect(() => {
     document.documentElement.classList.toggle("fd-snap", mode === "full" && snap);
-    if (mode === "full") window.scrollTo(0, 0);
     return () => { document.documentElement.classList.remove("fd-snap"); };
   }, [mode, snap]);
+
+  // once the spacer has a height, apply whatever scroll was waiting: a restored position or a hash
+  useEffect(() => {
+    if (docHeight <= 0 || pendingRef.current === null) return;
+    const board = boardRef.current;
+    let top = pendingRef.current;
+    if (top === -1 && board) {
+      const h = location.hash.slice(1).toUpperCase();
+      const S = (boardRef.current ? (createKjelScene(textRef.current || BOARD_DEFAULTS, liveRef.current).sections(board.rows, board.cols)) : {}) as Record<string, number>;
+      top = h in S ? S[h] * board.chh : 0;
+    }
+    pendingRef.current = null;
+    window.scrollTo(0, Math.max(0, top));
+  }, [docHeight]);
 
   // route changed: reshape the board when the canvas has finished resizing
   useEffect(() => {
@@ -122,9 +147,13 @@ export function BoardShell({ text, live, children }: { text?: BoardText; live?: 
     const canvas = canvasRef.current;
     if (!board || !canvas) return;
     if (next === modeRef.current) {
-      // same shape, different page: rebuild (the landing is tall, an entry is not) and deal it in
-      window.scrollTo(0, 0);
-      board.resize(); board.boot();
+      // same shape, different page: rebuild (the landing is tall, an entry is not) and deal it in.
+      // arriving by Back restores where you were; arriving by a link starts at the top (or the hash)
+      const back = popRef.current; popRef.current = false;
+      const saved = back ? posRef.current[pathname] : undefined;
+      pendingRef.current = saved ?? (pathname === "/" && location.hash ? -1 : 0); // -1: the hash decides
+      board.resize();
+      board.boot();
       return;
     }
     modeRef.current = next;

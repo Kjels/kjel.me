@@ -5,8 +5,8 @@
 
 export type Status = "live" | "building" | "prototype" | "parked";
 
-/** the ledger speaks Life: a project's state as a lifeform's */
-export const VERB: Record<Status, string> = { live: "MOVES", building: "GROWS", prototype: "OSC", parked: "STILL" };
+/** a project's state, in plain words */
+export const VERB: Record<Status, string> = { live: "LIVE", building: "BUILDING", prototype: "PROTOTYPE", parked: "PARKED" };
 
 export type Project = {
   slug: string;
@@ -72,7 +72,7 @@ export const PROJECTS: Project[] = [
   },
   {
     slug: "sprint-orchestrator",
-    title: "Sprint Orchestrator",
+    title: "Sprint",
     blurb: "Run a sprint of AI agents from markdown files. Task graph, budgets, review gates, live dashboard.",
     status: "prototype",
     repo: "Kjels/sprint-orchestrator",

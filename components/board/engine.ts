@@ -447,6 +447,9 @@ export class Board {
     });
   }
 
+  /** leave the board for a route (the shell decides how) */
+  route(path: string) { this.opts.onRoute?.(path); }
+
   /** swap the row function (a different board shape) and rebuild */
   reshape(rows: (W: number, H: number) => number) {
     this.opts.rows = rows;
@@ -713,8 +716,9 @@ export class Board {
     for (const l of this.extraLinks.length ? [...this.links, ...this.extraLinks] : this.links) {
       l.hoverP += ((l.hover ? 1 : 0) - l.hoverP) * (reduced ? 1 : 0.22);
       if (l.hoverP < 0.02) continue;
-      const uy = l.row + l.gh * l.scale + 1;
-      if (uy >= rows) continue;
+      // links in the composition scroll with it; pinned ones are already in screen rows
+      const uy = (l.pinned ? l.row : l.row - off) + l.gh * l.scale + 1;
+      if (uy < 0 || uy >= rows) continue;
       const n = Math.round(l.wCols * l.hoverP);
       ctx.fillStyle = ON;
       for (let c = 0; c < n; c++) {

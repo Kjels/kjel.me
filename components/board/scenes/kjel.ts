@@ -22,15 +22,24 @@ export type Live = { building: string; pushed: string; entries: number; place: s
 export const SCREENS = 3;
 /** the section a menu word scrolls to, in screens */
 export const SECTION: Record<string, number> = { HOME: 0, WORK: 1, ABOUT: 2 };
-/** rows per ledger entry, and the rows above the first entry (title and air) */
-const PER = 22, WORK_HEAD = 14 + 28 + 12;
+/** the ledger is tiles: a bordered box per project with its lifeform running inside */
+const TILE_H = 40, TILE_GAP = 4, WORK_HEAD = 14 + 28 + 12;
+/** rows from a section's start to its title: clear of the pinned band on narrow boards */
+const SECTION_PAD = (wide: boolean) => (wide ? 14 : 26);
+function tileGrid(rows: number, cols: number, n: number) {
+  const wide = cols / rows > 1.05;
+  const colL = wide ? Math.round(cols * 0.06) : 3, right = wide ? Math.round(cols * 0.94) : cols - 3;
+  const per = wide ? 2 : 1;
+  const tw = Math.floor((right - colL - TILE_GAP * (per - 1)) / per);
+  const th = wide ? TILE_H : 52;
+  const top = rows + (wide ? WORK_HEAD : SECTION_PAD(false) + 14 + 12);
+  const tiles = Array.from({ length: n }, (_, i) => ({ x: colL + (i % per) * (tw + TILE_GAP), y: top + Math.floor(i / per) * (th + TILE_GAP), w: tw, h: th }));
+  return { tiles, end: top + Math.ceil(n / per) * (th + TILE_GAP) + 12, wide };
+}
 /** where each section starts, in rows, for a board of this shape with n entries */
 export function sectionRows(rows: number, cols: number, n: number) {
-  const wide = cols / rows > 1.05;
-  const work = rows;
-  const workRows = (wide ? WORK_HEAD : 14 + 14 + 12) + n * PER + 12;
-  const about = work + Math.max(rows, workRows);
-  return { HOME: 0, WORK: work, ABOUT: about };
+  const g = tileGrid(rows, cols, n);
+  return { HOME: 0, WORK: rows, ABOUT: rows + Math.max(rows, g.end - rows) };
 }
 /** route name for an entry link on the board */
 export const entryLink = (slug: string) => "ENTRY:" + slug;
@@ -433,29 +442,37 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
 
     const S = sectionRows(rows, cols, (live?.ledger ?? []).length);
     // WORK
-    let y = S.WORK + 14;
+    let y = S.WORK + SECTION_PAD(wide);
     b.stamp("WORK", colL, y, sc * 2, undefined, false, true);
-    y += sc * 14 + 12;
     const entries = live?.ledger ?? [];
+    const G = tileGrid(rows, cols, entries.length);
+    tileRects = G.tiles;
     entries.forEach((e, i) => {
-      const top = y + i * PER;
-      // the lifeform, still, as a mark
-      const seed = SEEDS[e.slug];
-      if (seed) for (let r = 0; r < seed.length; r++) for (let c = 0; c < seed[r].length; c++) if (seed[r][c] === "1") b.block(colL + c * 2, top + 2 + r * 2, 2, 2);
-      const nx = colL + 14;
-      // long names wrap on narrow boards rather than running off the edge
-      const lines = wrap(e.title.toUpperCase(), sc, cols - nx - 3);
-      let w = 0, ly = top;
-      for (const line of lines) { w = Math.max(w, b.stamp(line, nx, ly, sc, entryLink(e.slug))); ly += sc * 7 + 2; }
-      // state and date share the name's line, right-aligned when there is room
-      const meta = `${e.state}  ${e.since}`;
-      const mw = measureCols(meta);
-      if (wide && right - mw > nx + w + 6) b.stamp(meta, right - mw, top + (sc * 7 - 7), 1);
-      else b.stamp(meta, nx, ly, 1, undefined, true);
+      const t = G.tiles[i];
+      // the box: a single-dot border
+      for (let x = t.x; x < t.x + t.w; x++) { b.block(x, t.y, 1, 1); b.block(x, t.y + t.h - 1, 1, 1); }
+      for (let yy = t.y; yy < t.y + t.h; yy++) { b.block(t.x, yy, 1, 1); b.block(t.x + t.w - 1, yy, 1, 1); }
+      // the lifeform lives in the box (drawn live by the tile layer): left of the name on wide boards,
+      // above it on narrow ones. the name at scale 2 when the word fits, else scale 1
+      const nx = wide ? t.x + 4 + LN * 3 + 4 : t.x + 4;
+      const avail = t.x + t.w - 4 - nx;
+      const nsc = wide && measureCols(e.title.toUpperCase()) * 2 <= avail ? 2 : 1;
+      let ly = wide ? t.y + 6 : t.y + 4 + LN * 2 + 5, w = 0;
+      for (const line of wrap(e.title.toUpperCase(), nsc, avail)) { w = Math.max(w, b.stamp(line, nx, ly, nsc, entryLink(e.slug))); ly += nsc * 7 + 3; }
+      const nameRec = b.links[b.links.length - 1];
+      ly += 3;
+      b.stamp(e.state, nx, ly, 1, undefined, true); ly += 8;
+      b.stamp("SINCE " + e.since, nx, ly, 1, undefined, true);
+      // the whole box is the link; hovering it lights the name
+      const a = b.hotAt(t.x * b.cw, t.y * b.chh, t.w * b.cw, t.h * b.chh, e.title.toLowerCase(), () => b.route(`/work/${e.slug}`), `/work/${e.slug}`);
+      a.addEventListener("mouseenter", () => { if (nameRec) { nameRec.hover = true; nameRec.since = performance.now() / 1000; } });
+      a.addEventListener("mouseleave", () => { if (nameRec) nameRec.hover = false; });
+      void w;
     });
+    y = G.end;
 
     // ABOUT
-    y = S.ABOUT + 14;
+    y = S.ABOUT + SECTION_PAD(wide);
     b.stamp("ABOUT", colL, y, sc * 2, undefined, false, true);
     y += sc * 14 + 12;
     const measure = aboutMeasure(cols, wide);
@@ -482,6 +499,42 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
       else b.stamp(wd, nx, row, 1, wd, true);
       nx += measureM(wd) + gap;
     }
+  }
+
+  /* ---------- the tiles' lifeforms: one sim per tile, drawn against the scroll ---------- */
+  let tileRects: { x: number; y: number; w: number; h: number }[] = [];
+  let tileL: Layer | null = null;
+  const tileSims: Record<string, { cells: Uint8Array; at: number }> = {};
+  function updateTiles(b: Board, t: number) {
+    if (current !== "HOME" || !live) { if (tileL && tileL.key !== "off") { tileL.key = "off"; tileL.mask.fill(0); } return; }
+    const L = (tileL ??= b.layer());
+    const g = Math.floor(t / 0.8);
+    const key = "tiles|" + g + "|" + b.winRow + "|" + b.cols;
+    if (key === L.key) return;
+    L.key = key; L.mask.fill(0);
+    const { cols, rows } = b;
+    live.ledger.forEach((e, i) => {
+      const seed = SEEDS[e.slug], r = tileRects[i];
+      if (!seed || !r) return;
+      let sim = tileSims[e.slug];
+      if (!sim) {
+        const cells = new Uint8Array(LN * LN); const oy = Math.floor((LN - seed.length) / 2), ox = Math.floor((LN - seed[0].length) / 2);
+        seed.forEach((row, y) => [...row].forEach((ch, x) => { if (ch === "1") cells[(oy + y) * LN + ox + x] = 1; }));
+        sim = tileSims[e.slug] = { cells, at: g };
+      }
+      while (sim.at < g) { sim.cells = lifeStep(sim.cells); sim.at++; }
+      // wide: 2x2 blocks on a 3-dot pitch beside the name. narrow: single dots on a 2-dot pitch above it
+      const wide = b.wide, pitch = wide ? 3 : 2, blk = wide ? 2 : 1;
+      const ox = r.x + 4, oy = (wide ? r.y + Math.floor((r.h - LN * 3) / 2) : r.y + 4) - b.winRow;
+      if (oy + LN * pitch < 0 || oy > rows) return;
+      for (let y = 0; y < LN; y++) for (let x = 0; x < LN; x++) if (sim.cells[y * LN + x])
+        for (let dy = 0; dy < blk; dy++) for (let dx = 0; dx < blk; dx++) { const xx = ox + x * pitch + dx, yy = oy + y * pitch + dy; if (xx >= 0 && xx < cols && yy >= 0 && yy < rows) L.mask[yy * cols + xx] = 1; }
+    });
+  }
+  function lifeStep(cells: Uint8Array) {
+    const nb = new Uint8Array(LN * LN);
+    for (let y = 0; y < LN; y++) for (let x = 0; x < LN; x++) { let n = 0; for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { if (!dx && !dy) continue; n += cells[((y + dy + LN) % LN) * LN + ((x + dx + LN) % LN)]; } nb[y * LN + x] = (cells[y * LN + x] ? n === 2 || n === 3 : n === 3) ? 1 : 0; }
+    return nb;
   }
 
   /* ---------- an entry: one screen for one project ---------- */
@@ -642,6 +695,7 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
     updateIdle(b, t);
     updateMark(b);
     updateLife(b, t);
+    updateTiles(b, t);
   }
 
   /** fetch the portrait, then recompose and deal the board in */
