@@ -62,6 +62,9 @@ export class Board {
   cols = 0; rows = 0; cw = 0; chh = 0;
   /** total rows of the composition (== rows unless the board is virtual) and the window's first row */
   vrows = 0; winRow = 0;
+  private prevWinRow = 0;
+  /** screen rows at the top that are pinned (not shifted when the window scrolls) */
+  pinnedRows = 0;
   /** while true, hotspots are position:fixed (pinned to the screen) rather than in the document */
   pinHots = false;
 
@@ -97,7 +100,7 @@ export class Board {
   layers: Layer[] = [];
   fx: Fx | null = null;
 
-  cursorMode = 1; // C cycles: 0 none · 1 trail · 2 guides
+  cursorMode = 0; // C cycles: 0 none · 1 trail · 2 guides
   /** performance.now()/1000 of the last pointer or key input */
   lastInput = 0;
   private paused = false;
@@ -580,6 +583,19 @@ export class Board {
     if (this.vrows > rows && this.opts.scrollOffset) this.winRow = Math.max(0, Math.min(this.vrows - rows, Math.floor(this.opts.scrollOffset() / chh)));
     else this.winRow = 0;
     const off = this.winRow;
+    // the window moved: carry the dot state with the content so what merely moved does not
+    // re-flip. only the rows revealed at the edge start dark and flip in. pinned rows stay put.
+    const k = off - this.prevWinRow;
+    if (k !== 0) {
+      const band = Math.min(rows, this.pinnedRows), from = band * cols, to = rows * cols;
+      for (const arr of [dotV, heat, trailV]) {
+        if (!arr) continue;
+        if (k > 0 && k < rows - band) { arr.copyWithin(from, from + k * cols, to); arr.fill(0, to - k * cols, to); }
+        else if (k < 0 && -k < rows - band) { arr.copyWithin(from - k * cols, from, to + k * cols); arr.fill(0, from, from - k * cols); }
+        else arr.fill(0, from, to);
+      }
+      this.prevWinRow = off;
+    }
     for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) {
       const i = y * cols + x, vy = y + off, vi = vy * cols + x;
       const useOld = inTrans && prevLum !== null && x + hash2(x, vy) * 8 > sweep;

@@ -285,7 +285,7 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
     const L = (play ??= b.layer());
     const { cols, rows, wide, reduced } = b;
     const pm = L.mask;
-    const on = current === "HOME" && wide && !reduced && b.winRow < rows * 0.5;
+    const on = current === "HOME" && wide && !reduced && b.winRow < 2; // he laps the first screen only
     if (!on) {
       if (L.key !== "off") { L.key = "off"; pm.fill(0); }
       return;
@@ -353,6 +353,7 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
     // the top line is pinned: it stays while the rest of the board scrolls beneath it
     const P = (pins ??= b.layer());
     P.mask.fill(0); P.key = "pins";
+    b.pinnedRows = wide ? 12 : 22; // the top band the menu and the small mark live in
     b.extraLinks = b.extraLinks.filter((l) => !l.page.startsWith("PIN:"));
     {
       const right = wide ? Math.round(cols * 0.94) : cols - 3;
