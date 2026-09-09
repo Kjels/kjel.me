@@ -4,9 +4,9 @@ import { useEffect, useRef } from "react";
 import { Board } from "./board/engine";
 import { PICTOS } from "./board/pictos";
 
-// One project's pictogram: standalone dots on a small board with no grid.
+// One project's pictogram: a 7x7 grid of standalone dots on a board with no unlit layer.
 // Steps a little faster while hovered or focused.
-export function Picto({ slug, pitch = 12, className }: { slug: string; pitch?: number; className?: string }) {
+export function Picto({ slug, className }: { slug: string; className?: string }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const hostRef = useRef<HTMLDivElement>(null);
 
@@ -20,7 +20,7 @@ export function Picto({ slug, pitch = 12, className }: { slug: string; pitch?: n
       canvas,
       hots,
       grid: false,
-      rows: (_W, H) => Math.max(4, Math.round(H / pitch)),
+      rows: () => 7, // always a 7x7 grid; the box sets the pitch
       compose: () => {},
       tick: (b, t) => {
         // the pictogram's own clock: it runs at a quarter speed until the cell is live
@@ -39,7 +39,7 @@ export function Picto({ slug, pitch = 12, className }: { slug: string; pitch?: n
     const ro = new ResizeObserver(() => board.resize());
     ro.observe(canvas);
     return () => { ro.disconnect(); board.destroy(); };
-  }, [slug, pitch]);
+  }, [slug]);
 
   return (
     <div ref={hostRef} className={className}>
