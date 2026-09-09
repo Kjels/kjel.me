@@ -31,7 +31,7 @@ function tileGrid(rows: number, cols: number, n: number) {
   const colL = wide ? Math.round(cols * 0.06) : 3, right = wide ? Math.round(cols * 0.94) : cols - 3;
   const per = wide ? 2 : 1;
   const tw = Math.floor((right - colL - TILE_GAP * (per - 1)) / per);
-  const th = wide ? TILE_H : 52;
+  const th = wide ? TILE_H : 62;
   const top = rows + (wide ? WORK_HEAD : SECTION_PAD(false) + 14 + 12);
   const tiles = Array.from({ length: n }, (_, i) => ({ x: colL + (i % per) * (tw + TILE_GAP), y: top + Math.floor(i / per) * (th + TILE_GAP), w: tw, h: th }));
   return { tiles, end: top + Math.ceil(n / per) * (th + TILE_GAP) + 12, wide };
