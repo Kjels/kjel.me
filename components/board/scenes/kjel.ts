@@ -45,7 +45,7 @@ export function sectionRows(rows: number, cols: number, n: number) {
 /** route name for an entry link on the board */
 export const entryLink = (slug: string) => "ENTRY:" + slug;
 
-const aboutMeasure = (cols: number, wide: boolean) => (wide ? Math.round(cols * 0.62) : cols - 6);
+const aboutMeasure = (cols: number, wide: boolean) => (wide ? Math.round(cols * 0.88) : cols - 6); // the full width between the gutters
 /** rows the about section needs: title, lines, place, links, air */
 function aboutRows(cols: number, wide: boolean) {
   let n = 14 + 28 + 12;
