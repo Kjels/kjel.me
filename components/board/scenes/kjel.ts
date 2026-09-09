@@ -22,16 +22,16 @@ export type Live = { building: string; pushed: string; entries: number; place: s
 export const SCREENS = 3;
 /** the section a menu word scrolls to, in screens */
 export const SECTION: Record<string, number> = { HOME: 0, WORK: 1, ABOUT: 2 };
-/** the ledger is tiles: a bordered box per project with its lifeform running inside */
-const TILE_H = 40, TILE_GAP = 4, WORK_HEAD = 14 + 28 + 12;
+/** the ledger is tiles: one full-width box per project, all the same shape */
+const TILE_H = 48, TILE_GAP = 5, WORK_HEAD = 14 + 28 + 12;
 /** rows from a section's start to its title: clear of the pinned band on narrow boards */
 const SECTION_PAD = (wide: boolean) => (wide ? 14 : 26);
 function tileGrid(rows: number, cols: number, n: number) {
   const wide = cols / rows > 1.05;
   const colL = wide ? Math.round(cols * 0.06) : 3, right = wide ? Math.round(cols * 0.94) : cols - 3;
-  const per = wide ? 2 : 1;
-  const tw = Math.floor((right - colL - TILE_GAP * (per - 1)) / per);
-  const th = wide ? TILE_H : 62;
+  const per = 1;
+  const tw = right - colL;
+  const th = wide ? TILE_H : 82;
   const top = rows + (wide ? WORK_HEAD : SECTION_PAD(false) + 14 + 12);
   const tiles = Array.from({ length: n }, (_, i) => ({ x: colL + (i % per) * (tw + TILE_GAP), y: top + Math.floor(i / per) * (th + TILE_GAP), w: tw, h: th }));
   return { tiles, end: top + Math.ceil(n / per) * (th + TILE_GAP) + 12, wide };
@@ -83,6 +83,7 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
   const external: Record<string, string> = { EMAIL: "mailto:hello@kjel.me", GITHUB: "https://github.com/Kjels" };
   let pins: Layer | null = null; // the pinned top line on the tall landing
 
+  const LN = 11; // the lifeforms' square
   let portrait: HTMLCanvasElement | null = null;
   let wave: HTMLCanvasElement | null = null;
   let waving = false;
@@ -446,28 +447,49 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
     b.stamp("WORK", colL, y, sc * 2, undefined, false, true);
     const entries = live?.ledger ?? [];
     const G = tileGrid(rows, cols, entries.length);
-    tileRects = G.tiles;
     entries.forEach((e, i) => {
       const t = G.tiles[i];
       // the box: a single-dot border
       for (let x = t.x; x < t.x + t.w; x++) { b.block(x, t.y, 1, 1); b.block(x, t.y + t.h - 1, 1, 1); }
       for (let yy = t.y; yy < t.y + t.h; yy++) { b.block(t.x, yy, 1, 1); b.block(t.x + t.w - 1, yy, 1, 1); }
-      // the lifeform lives in the box (drawn live by the tile layer): left of the name on wide boards,
-      // above it on narrow ones. the name at scale 2 when the word fits, else scale 1
-      const nx = wide ? t.x + 4 + LN * 3 + 4 : t.x + 4;
-      const avail = t.x + t.w - 4 - nx;
-      const nsc = wide && measureCols(e.title.toUpperCase()) * 2 <= avail ? 2 : 1;
-      let ly = wide ? t.y + 6 : t.y + 4 + LN * 2 + 5, w = 0;
-      for (const line of wrap(e.title.toUpperCase(), nsc, avail)) { w = Math.max(w, b.stamp(line, nx, ly, nsc, entryLink(e.slug))); ly += nsc * 7 + 3; }
+      const seed = SEEDS[e.slug];
+      // the lifeform, still: 2x2 blocks on a 3-dot pitch, centred in an 11-cell square
+      const drawSeed = (ox: number, oy: number, pitch: number, blk: number) => {
+        if (!seed) return;
+        const sy = Math.floor((LN - seed.length) / 2), sx = Math.floor((LN - seed[0].length) / 2);
+        for (let r = 0; r < seed.length; r++) for (let c = 0; c < seed[r].length; c++) if (seed[r][c] === "1") b.block(ox + (sx + c) * pitch, oy + (sy + r) * pitch, blk, blk);
+      };
+      const specs = [e.state, "SINCE " + e.since, e.gen, e.pushed ? "PUSHED " + e.pushed : null].filter(Boolean) as string[];
+      if (wide) {
+        drawSeed(t.x + 5, t.y + Math.floor((t.h - LN * 3) / 2), 3, 2);
+        const nx = t.x + 5 + LN * 3 + 6, right = t.x + t.w - 5;
+        let ly = t.y + 7;
+        b.stamp(e.title.toUpperCase(), nx, ly, 2, entryLink(e.slug)); ly += 14 + 5;
+        // one short line with some character; the one-liner lives on the entry
+        const tag = (e.lines[0] || e.blurb).toUpperCase();
+        for (const line of wrap(tag, 1, right - nx).slice(0, 1)) { b.stamp(line, nx, ly, 1); ly += 9; }
+        // the bottom line: roadmap ticks left, the specs right, in the small face
+        const by = t.y + t.h - 10;
+        let spec = specs.join("   "), sw = measureM(spec);
+        while (sw > right - nx - 40 && specs.length > 2) { specs.pop(); spec = specs.join("   "); sw = measureM(spec); }
+        b.stamp(spec, right - sw, by, 1, undefined, true);
+        if (e.roadmap && e.roadmap.total) {
+          for (let k = 0; k < e.roadmap.total; k++) { const x = nx + k * 4; if (x + 2 > right - sw - 8) break; if (k < e.roadmap.done) b.block(x, by + 1, 2, 2); else b.block(x, by + 2, 1, 1); }
+        }
+      } else {
+        drawSeed(t.x + 4, t.y + 4, 2, 1);
+        const nx = t.x + 4;
+        let ly = t.y + 4 + LN * 2 + 5;
+        b.stamp(e.title.toUpperCase(), nx, ly, 1, entryLink(e.slug)); ly += 7 + 4;
+        for (const line of wrapM((e.lines[0] || e.blurb).toUpperCase(), t.w - 8).slice(0, 2)) { b.stamp(line, nx, ly, 1, undefined, true); ly += 8; }
+        ly += 3;
+        for (const sp of specs) { b.stamp(sp, nx, ly, 1, undefined, true); ly += 8; }
+      }
       const nameRec = b.links[b.links.length - 1];
-      ly += 3;
-      b.stamp(e.state, nx, ly, 1, undefined, true); ly += 8;
-      b.stamp("SINCE " + e.since, nx, ly, 1, undefined, true);
       // the whole box is the link; hovering it lights the name
-      const a = b.hotAt(t.x * b.cw, t.y * b.chh, t.w * b.cw, t.h * b.chh, e.title.toLowerCase(), () => b.route(`/work/${e.slug}`), `/work/${e.slug}`);
-      a.addEventListener("mouseenter", () => { if (nameRec) { nameRec.hover = true; nameRec.since = performance.now() / 1000; } });
-      a.addEventListener("mouseleave", () => { if (nameRec) nameRec.hover = false; });
-      void w;
+      const hot = b.hotAt(t.x * b.cw, t.y * b.chh, t.w * b.cw, t.h * b.chh, e.title.toLowerCase(), () => b.route(`/work/${e.slug}`), `/work/${e.slug}`);
+      hot.addEventListener("mouseenter", () => { if (nameRec) { nameRec.hover = true; nameRec.since = performance.now() / 1000; } });
+      hot.addEventListener("mouseleave", () => { if (nameRec) nameRec.hover = false; });
     });
     y = G.end;
 
@@ -501,72 +523,7 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
     }
   }
 
-  /* ---------- the tiles' lifeforms: one sim per tile, drawn against the scroll ---------- */
-  let tileRects: { x: number; y: number; w: number; h: number }[] = [];
-  let tileL: Layer | null = null;
-  const tileSims: Record<string, { cells: Uint8Array; at: number }> = {};
-  function updateTiles(b: Board, t: number) {
-    if (current !== "HOME" || !live) { if (tileL && tileL.key !== "off") { tileL.key = "off"; tileL.mask.fill(0); } return; }
-    const L = (tileL ??= b.layer());
-    const g = Math.floor(t / 0.8);
-    const key = "tiles|" + g + "|" + b.winRow + "|" + b.cols;
-    if (key === L.key) return;
-    L.key = key; L.mask.fill(0);
-    const { cols, rows } = b;
-    live.ledger.forEach((e, i) => {
-      const seed = SEEDS[e.slug], r = tileRects[i];
-      if (!seed || !r) return;
-      let sim = tileSims[e.slug];
-      if (!sim) {
-        const cells = new Uint8Array(LN * LN); const oy = Math.floor((LN - seed.length) / 2), ox = Math.floor((LN - seed[0].length) / 2);
-        seed.forEach((row, y) => [...row].forEach((ch, x) => { if (ch === "1") cells[(oy + y) * LN + ox + x] = 1; }));
-        sim = tileSims[e.slug] = { cells, at: g };
-      }
-      while (sim.at < g) { sim.cells = lifeStep(sim.cells); sim.at++; }
-      // wide: 2x2 blocks on a 3-dot pitch beside the name. narrow: single dots on a 2-dot pitch above it
-      const wide = b.wide, pitch = wide ? 3 : 2, blk = wide ? 2 : 1;
-      const ox = r.x + 4, oy = (wide ? r.y + Math.floor((r.h - LN * 3) / 2) : r.y + 4) - b.winRow;
-      if (oy + LN * pitch < 0 || oy > rows) return;
-      for (let y = 0; y < LN; y++) for (let x = 0; x < LN; x++) if (sim.cells[y * LN + x])
-        for (let dy = 0; dy < blk; dy++) for (let dx = 0; dx < blk; dx++) { const xx = ox + x * pitch + dx, yy = oy + y * pitch + dy; if (xx >= 0 && xx < cols && yy >= 0 && yy < rows) L.mask[yy * cols + xx] = 1; }
-    });
-  }
-  function lifeStep(cells: Uint8Array) {
-    const nb = new Uint8Array(LN * LN);
-    for (let y = 0; y < LN; y++) for (let x = 0; x < LN; x++) { let n = 0; for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { if (!dx && !dy) continue; n += cells[((y + dy + LN) % LN) * LN + ((x + dx + LN) % LN)]; } nb[y * LN + x] = (cells[y * LN + x] ? n === 2 || n === 3 : n === 3) ? 1 : 0; }
-    return nb;
-  }
-
   /* ---------- an entry: one screen for one project ---------- */
-  let lifeL: Layer | null = null, lifeCells: Uint8Array | null = null, lifeAt = 0, lifeSlug = "";
-  const LN = 11;
-  function updateLife(b: Board, t: number) {
-    if (!current.startsWith("ENTRY:") || !b.wide) { if (lifeL && lifeL.key !== "off") { lifeL.key = "off"; lifeL.mask.fill(0); } return; }
-    const L = (lifeL ??= b.layer());
-    const slug = current.slice(6), seed = SEEDS[slug];
-    if (!seed) return;
-    if (lifeSlug !== slug || !lifeCells) {
-      lifeCells = new Uint8Array(LN * LN); lifeSlug = slug; lifeAt = Math.floor(t / 0.8);
-      const oy = Math.floor((LN - seed.length) / 2), ox = Math.floor((LN - seed[0].length) / 2);
-      seed.forEach((r, y) => [...r].forEach((ch, x) => { if (ch === "1") lifeCells![(oy + y) * LN + ox + x] = 1; }));
-    }
-    const g = Math.floor(t / 0.8);
-    while (lifeAt < g) {
-      const nb = new Uint8Array(LN * LN);
-      for (let y = 0; y < LN; y++) for (let x = 0; x < LN; x++) { let n = 0; for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { if (!dx && !dy) continue; n += lifeCells[((y + dy + LN) % LN) * LN + ((x + dx + LN) % LN)]; } nb[y * LN + x] = (lifeCells[y * LN + x] ? n === 2 || n === 3 : n === 3) ? 1 : 0; }
-      lifeCells = nb; lifeAt++;
-    }
-    const key = slug + "|" + g + "|" + b.cols;
-    if (key === L.key) return;
-    L.key = key; L.mask.fill(0);
-    // the lifeform lives where the portrait does on the landing, in 3x3 blocks
-    const { cols, rows, wide } = b, sc = wide ? 5 : 3;
-    const ox = wide ? Math.round(cols * 0.78) - Math.floor(LN * sc / 2) : Math.round(cols / 2) - Math.floor(LN * sc / 2);
-    const oy = wide ? Math.round(rows * 0.4) - Math.floor(LN * sc / 2) : rows - 16 - LN * sc;
-    for (let y = 0; y < LN; y++) for (let x = 0; x < LN; x++) if (lifeCells[y * LN + x])
-      for (let dy = 0; dy < sc - 1; dy++) for (let dx = 0; dx < sc - 1; dx++) { const xx = ox + x * sc + dx, yy = oy + y * sc + dy; if (xx >= 0 && xx < cols && yy >= 0 && yy < rows) L.mask[yy * cols + xx] = 1; }
-  }
-
   /** the entry's layout, so its height is known before compose: rows for each part */
   function entryLayout(rows: number, cols: number, e: Entry) {
     const wide = cols / rows > 1.05;
@@ -614,7 +571,12 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
     y = L.yBlurb; for (const line of L.blurb) { b.stamp(line, colL, y, 1); y += 9; }
     // the short lines, in the small face
     y = L.yFun; for (const l of L.fun) { b.stamp(l, colL, y, 1, undefined, true); y += 8; }
-    // on narrow boards the lifeform is still, top right beside a one-line title
+    // the lifeform, still. wide: large, where the portrait sits on the landing. narrow: beside a one-line title
+    if (wide) {
+      const seed = SEEDS[slug], sc = 5;
+      if (seed) { const ox = Math.round(cols * 0.78) - Math.floor(LN * sc / 2), oy = Math.round(rows * 0.4) - Math.floor(LN * sc / 2), sy = Math.floor((LN - seed.length) / 2), sx = Math.floor((LN - seed[0].length) / 2);
+        for (let r = 0; r < seed.length; r++) for (let c = 0; c < seed[r].length; c++) if (seed[r][c] === "1") b.block(ox + (sx + c) * sc, oy + (sy + r) * sc, sc - 1, sc - 1); }
+    }
     if (!wide && L.title.length === 1) {
       const seed = SEEDS[slug], tw = measureCols(L.title[0]) * sc;
       if (seed && colL + tw + 4 + seed[0].length * 2 <= cols - 3) for (let r = 0; r < seed.length; r++) for (let c = 0; c < seed[r].length; c++) if (seed[r][c] === "1") b.block(cols - 3 - (seed[r].length - c) * 2, L.yTitle + r * 2, 2, 2);
@@ -694,8 +656,6 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
     updatePreview(b);
     updateIdle(b, t);
     updateMark(b);
-    updateLife(b, t);
-    updateTiles(b, t);
   }
 
   /** fetch the portrait, then recompose and deal the board in */
