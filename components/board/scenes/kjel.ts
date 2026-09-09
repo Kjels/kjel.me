@@ -6,11 +6,45 @@
 
 import type { BoardText } from "@/lib/board-text";
 import { Board, type Layer, type LinkRec } from "../engine";
-import { DS, measureCols, measureM, wrapM, fit } from "../font";
+import { DS, measureCols, measureM, wrap, wrapM, fit } from "../font";
 import { loadPortrait } from "../portrait";
+import { SEEDS } from "../pictos";
 
-/** what the ledger knows right now, for the landing's live line and menu previews */
-export type Live = { building: string; pushed: string; entries: number; place: string };
+/** one line of the ledger, as the landing shows it */
+export type Entry = { slug: string; title: string; state: string; since: string };
+/** what the ledger knows right now, for the landing's live line, menu previews and the in-board ledger */
+export type Live = { building: string; pushed: string; entries: number; place: string; ledger: Entry[] };
+
+/** the landing is three sections tall: home, work, about. home and work are a screen each; about takes what it needs */
+export const SCREENS = 3;
+/** the section a menu word scrolls to, in screens */
+export const SECTION: Record<string, number> = { HOME: 0, WORK: 1, ABOUT: 2 };
+/** rows per ledger entry, and the rows above the first entry (title and air) */
+const PER = 22, WORK_HEAD = 14 + 28 + 12;
+/** where each section starts, in rows, for a board of this shape with n entries */
+export function sectionRows(rows: number, cols: number, n: number) {
+  const wide = cols / rows > 1.05;
+  const work = rows;
+  const workRows = (wide ? WORK_HEAD : 14 + 14 + 12) + n * PER + 12;
+  const about = work + Math.max(rows, workRows);
+  return { HOME: 0, WORK: work, ABOUT: about };
+}
+/** route name for an entry link on the board */
+export const entryLink = (slug: string) => "ENTRY:" + slug;
+
+const ABOUT_LINES = [
+  "I BUILD SMALL SOFTWARE AND THE OCCASIONAL APPLIANCE.",
+  "RIGHT NOW: A KITCHEN SCALE WITH A SCREEN IN IT, A TMUX WORKSPACE THAT FOLLOWS ME BETWEEN MACHINES, AND THIS SIGN.",
+  "BY DAY I DESIGN THE OUTBOUND ENGINE AT HACKAJOB.",
+  "ROWER TURNED RUNNER. FIXED GEAR. BOARD GAMES THAT TAKE A WHOLE EVENING.",
+];
+const aboutMeasure = (cols: number, wide: boolean) => (wide ? Math.round(cols * 0.62) : cols - 6);
+/** rows the about section needs: title, lines, place, links, air */
+function aboutRows(cols: number, wide: boolean) {
+  let n = 14 + 28 + 12;
+  for (const para of ABOUT_LINES) n += wrap(para, 1, aboutMeasure(cols, wide)).length * 9 + 6;
+  return n + 4 + 10 + 7 + 24;
+}
 
 /** the sections, in menu order; each is an HTML route */
 export const NAV = ["WORK", "ABOUT"];
@@ -34,7 +68,8 @@ const EYES: [number, number][] = [[0.386, 0.276], [0.55, 0.274]];
 
 export function createKjelScene(TXT: BoardText, live?: Live) {
   const ROLES = TXT.roles; // sequential, never random: a first visit reads the sane ones first
-  const external: Record<string, string> = {};
+  const external: Record<string, string> = { EMAIL: "mailto:hello@kjel.me", GITHUB: "https://github.com/Kjels" };
+  let pins: Layer | null = null; // the pinned top line on the tall landing
 
   let portrait: HTMLCanvasElement | null = null;
   let wave: HTMLCanvasElement | null = null;
@@ -174,9 +209,10 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
   function updateClock(b: Board, t: number) {
     const L = (clock ??= b.layer());
     const { cols, rows, wide, reduced } = b;
-    const home = current === "HOME";
+    const scrolled = b.winRow > Math.round(rows * 0.3);
+    const home = current === "HOME" && !scrolled;
     const fi = reduced ? 0 : Math.floor(t / 2.8) % ROLES.length;
-    const key = current + "|" + ((Date.now() / 1000) | 0) + "|" + fi + "|" + nowTitle;
+    const key = current + "|" + (scrolled ? "s" : "h") + "|" + ((Date.now() / 1000) | 0) + "|" + fi + "|" + nowTitle;
     if (key === L.key) return;
     L.key = key;
     L.mask.fill(0);
@@ -185,9 +221,9 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
     const hhs = String(hh).padStart(2, "0"), mms = String(mm).padStart(2, "0");
     if (!home) {
       clearNowHot(b); // the announcement lives on home only
-      // the strip: a small clock, centered, colon beating; dropped when the
-      // mark and the menu leave it no room (phones)
-      const row = Math.round((rows - 5) / 2);
+      // the strip, or the scrolled landing: a small clock on the top line, colon beating;
+      // dropped when the mark and the menu leave it no room (phones)
+      const row = current === "HOME" ? 3 : Math.round((rows - 5) / 2);
       const w = measureM(hhs) + 2 + measureM(":") + 2 + measureM(mms);
       const navW = NAV.reduce((s, wd) => s + measureM(wd) + 6, 0) - 6;
       if (cols / 2 - w / 2 - 8 < 3 + measureM("KJEL.") || cols / 2 + w / 2 + 8 > cols - 3 - navW) { L.halo = null; return; }
@@ -249,7 +285,7 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
     const L = (play ??= b.layer());
     const { cols, rows, wide, reduced } = b;
     const pm = L.mask;
-    const on = current === "HOME" && wide && !reduced;
+    const on = current === "HOME" && wide && !reduced && b.winRow < rows * 0.5;
     if (!on) {
       if (L.key !== "off") { L.key = "off"; pm.fill(0); }
       return;
@@ -314,19 +350,22 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
 
   function composeHome(b: Board) {
     const { cols, rows, W, H, cw, chh, wide } = b;
+    // the top line is pinned: it stays while the rest of the board scrolls beneath it
+    const P = (pins ??= b.layer());
+    P.mask.fill(0); P.key = "pins";
+    b.extraLinks = b.extraLinks.filter((l) => !l.page.startsWith("PIN:"));
+    {
+      const right = wide ? Math.round(cols * 0.94) : cols - 3;
+      const gap = 6;
+      const total = NAV.reduce((s, w) => s + measureM(w) + gap, 0) - gap;
+      let nx = wide ? right - total : 3;
+      const ny = wide ? 3 : 13;
+      for (const wd of NAV) { b.pinLink(P, wd, nx, ny, true, wd); nx += measureM(wd) + gap; }
+      bandHalo(b, P, ny + 8);
+    }
     if (wide) {
       const colL = Math.round(cols * 0.06);
       const right = Math.round(cols * 0.94);
-      // the menu on the top line; each word leaves the board for its page
-      {
-        const gap = 6;
-        const total = NAV.reduce((s, w) => s + measureM(w) + gap, 0) - gap;
-        let nx = right - total;
-        for (const wd of NAV) {
-          b.stamp(wd, nx, 3, 1, wd, true);
-          nx += measureM(wd) + gap;
-        }
-      }
       const cap = Math.min(H * 0.26, (W * 0.5) / 2.9);
       b.drawMark(cap, colL * cw, H * 0.4);
       if (portrait) {
@@ -359,15 +398,7 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
       }
     } else {
       const colL = 3;
-      // menu on top, wrapped in fixed slots
-      let nx = colL, ny = 13;
-      for (const wd of NAV) {
-        const wc = measureM(wd);
-        if (nx + wc > cols - 3) { nx = colL; ny += 9; }
-        b.stamp(wd, nx, ny, 1, wd, true);
-        nx += wc + 6;
-      }
-      const titleTop = ny + 14;
+      const titleTop = 13 + 14;
       const cap = Math.min(H * 0.14, (W * 0.88) / 2.9);
       b.drawMark(cap, colL * cw, (titleTop + 21) * chh);
       let irow = titleTop + 41;
@@ -379,6 +410,59 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
         irow += 4;
       }
     }
+    if (b.vrows > rows) composeBelow(b);
+  }
+
+  /** the pinned line's halo is a whole band: rows 0..to are cleared of whatever scrolls beneath */
+  function bandHalo(b: Board, L: Layer, to: number) {
+    b.haloOf(L);
+    const h = L.halo!;
+    for (let y = 0; y < Math.min(b.rows, to); y++) for (let x = 0; x < b.cols; x++) if (!L.mask[y * b.cols + x]) h[y * b.cols + x] = 1;
+  }
+
+  /* the screens below the fold: the ledger, then about. all in dots. */
+  function composeBelow(b: Board) {
+    const { cols, rows, wide } = b;
+    const colL = wide ? Math.round(cols * 0.06) : 3;
+    const right = wide ? Math.round(cols * 0.94) : cols - 3;
+    const sc = wide ? 2 : 1;
+
+    const S = sectionRows(rows, cols, (live?.ledger ?? []).length);
+    // WORK
+    let y = S.WORK + 14;
+    b.stamp("WORK", colL, y, sc * 2, undefined, false, true);
+    y += sc * 14 + 12;
+    const entries = live?.ledger ?? [];
+    entries.forEach((e, i) => {
+      const top = y + i * PER;
+      // the lifeform, still, as a mark
+      const seed = SEEDS[e.slug];
+      if (seed) for (let r = 0; r < seed.length; r++) for (let c = 0; c < seed[r].length; c++) if (seed[r][c] === "1") b.block(colL + c * 2, top + 2 + r * 2, 2, 2);
+      const nx = colL + 14;
+      // long names wrap on narrow boards rather than running off the edge
+      const lines = wrap(e.title.toUpperCase(), sc, cols - nx - 3);
+      let w = 0, ly = top;
+      for (const line of lines) { w = Math.max(w, b.stamp(line, nx, ly, sc, entryLink(e.slug))); ly += sc * 7 + 2; }
+      // state and date share the name's line, right-aligned when there is room
+      const meta = `${e.state}  ${e.since}`;
+      const mw = measureCols(meta);
+      if (wide && right - mw > nx + w + 6) b.stamp(meta, right - mw, top + (sc * 7 - 7), 1);
+      else b.stamp(meta, nx, ly, 1, undefined, true);
+    });
+
+    // ABOUT
+    y = S.ABOUT + 14;
+    b.stamp("ABOUT", colL, y, sc * 2, undefined, false, true);
+    y += sc * 14 + 12;
+    const measure = aboutMeasure(cols, wide);
+    for (const para of ABOUT_LINES) {
+      for (const line of wrap(para, 1, measure)) { b.stamp(line, colL, y, 1); y += 9; }
+      y += 6;
+    }
+    y += 4;
+    b.stamp(live?.place || "BROOKLYN, NY", colL, y, 1); y += 10;
+    b.stamp("EMAIL", colL, y, 1, "EMAIL", true, true);
+    b.stamp("GITHUB", colL + measureM("EMAIL") + 8, y, 1, "GITHUB", true, true);
   }
 
   // the masthead: mark left, menu right, clock in the middle (from the layer)
@@ -411,13 +495,13 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
     const L = (preview ??= b.layer());
     const { cols, rows, wide } = b;
     if (current !== "HOME" || !wide) { if (L.key !== "off") { L.key = "off"; L.mask.fill(0); } return; }
-    const hot = b.links.find((l) => l.hover && NAV.includes(l.page));
-    const key = hot ? hot.page : "none";
+    const hot = b.extraLinks.find((l) => l.hover && l.page.startsWith("PIN:") && NAV.includes(l.page.slice(4)));
+    const key = hot ? hot.page.slice(4) : "none";
     if (key === L.key) return;
     L.key = key;
     L.mask.fill(0);
     if (!hot) return;
-    const text = hot.page === "WORK"
+    const text = key === "WORK"
       ? (live ? `${live.entries} ENTRIES` + (live.pushed ? ` · PUSHED ${live.pushed}` : "") : "THE LEDGER")
       : (live?.place || "BROOKLYN, NY");
     // to the left of the menu, on its line, so it never touches the portrait
@@ -438,11 +522,22 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
     if (shouldWave !== waving) { waving = shouldWave; b.compose(); }
   }
 
+  let markPinned = false;
+  function updateMark(b: Board) {
+    // once the big mark has scrolled off, a small KJEL. takes the top-left, a link back to the top
+    const want = current === "HOME" && b.winRow > Math.round(b.rows * 0.3);
+    if (want === markPinned || !pins) return;
+    markPinned = want;
+    if (want) { b.pinLink(pins, "KJEL.", 3, 3, true, "HOME"); bandHalo(b, pins, 11); }
+    else b.compose(); // rebuild the pins without it
+  }
+
   function tick(b: Board, t: number) {
     updateClock(b, t);
     updatePlay(b, t);
     updatePreview(b);
     updateIdle(b, t);
+    updateMark(b);
   }
 
   /** fetch the portrait, then recompose and deal the board in */
@@ -460,5 +555,11 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
     window.clearInterval(nowTimer);
   }
 
-  return { compose, tick, load, destroy, external, rows: (W: number, H: number) => (W / H > 1.05 ? 141 : 153) };
+  return {
+    compose, tick, load, destroy, external,
+    rows: (W: number, H: number) => (W / H > 1.05 ? 141 : 153),
+    /** total rows of the tall landing: home, the ledger, then what about needs */
+    height: (rows: number, cols: number) => sectionRows(rows, cols, (live?.ledger ?? []).length).ABOUT + Math.max(rows, aboutRows(cols, cols / rows > 1.05)),
+    sections: (rows: number, cols: number) => sectionRows(rows, cols, (live?.ledger ?? []).length),
+  };
 }

@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { BOARD_DEFAULTS, type BoardText } from "@/lib/board-text";
 import { Board } from "./board/engine";
-import { createKjelScene, NAV, STRIP_ROWS, STRIP_H, ROUTES, sectionFor, type Live } from "./board/scenes/kjel";
+import { createKjelScene, NAV, STRIP_ROWS, STRIP_H, ROUTES, SCREENS, entryLink, sectionFor, type Live } from "./board/scenes/kjel";
 
 type Mode = "full" | "strip";
 const modeFor = (path: string): Mode => (path === "/" ? "full" : "strip");
@@ -27,6 +27,9 @@ export function BoardShell({ text, live, children }: { text?: BoardText; live?: 
   const liveRef = useRef(live);
   const [mode, setMode] = useState<Mode>(modeFor(pathname));
   const [ready, setReady] = useState(false);
+  const [docHeight, setDocHeight] = useState(0);
+  // ?scroll=snap makes the tall landing settle on whole screens; default is free, row-stepped scrolling
+  const [snap] = useState(() => typeof location !== "undefined" && new URLSearchParams(location.search).get("scroll") === "snap");
 
   useEffect(() => { textRef.current = text; }, [text]);
   useEffect(() => { pathRef.current = pathname; }, [pathname]);
@@ -34,6 +37,8 @@ export function BoardShell({ text, live, children }: { text?: BoardText; live?: 
   // build the board once
   useEffect(() => {
     const scene = createKjelScene(textRef.current || BOARD_DEFAULTS, liveRef.current);
+    const routes: Record<string, string> = { ...ROUTES };
+    for (const e of liveRef.current?.ledger ?? []) routes[entryLink(e.slug)] = `/work/${e.slug}`;
     const board = new Board({
       canvas: canvasRef.current!,
       hots: hotsRef.current!,
@@ -48,11 +53,21 @@ export function BoardShell({ text, live, children }: { text?: BoardText; live?: 
         }
         return modeRef.current === "full" ? scene.rows(W, H) : STRIP_ROWS;
       },
+      // the landing is three screens tall; every other page is exactly the strip
+      virtualRows: (rows, cols) => (modeRef.current === "full" && !transitRef.current ? scene.height(rows, cols) : rows),
+      scrollOffset: () => window.scrollY,
+      onFit: (b) => setDocHeight(b.vrows > b.rows ? Math.round(b.vrows * b.chh) : 0),
       compose: (b) => scene.compose(b, modeRef.current === "full" ? "HOME" : "STRIP:" + sectionFor(pathRef.current)),
       tick: scene.tick,
       external: scene.external,
-      routes: ROUTES,
+      routes,
       onRoute: (path) => {
+        // on the landing, WORK and ABOUT are sections of the board: scroll to them
+        if (modeRef.current === "full") {
+          const S = scene.sections(board.rows, board.cols);
+          const row = path === "/" ? S.HOME : path === "/work" ? S.WORK : path === "/about" ? S.ABOUT : -1;
+          if (row >= 0) { window.scrollTo({ top: row * board.chh, behavior: board.reduced ? "auto" : "smooth" }); return; }
+        }
         if (path === pathRef.current) return;
         board.wipeOut().then(() => router.push(path));
       },
@@ -72,12 +87,12 @@ export function BoardShell({ text, live, children }: { text?: BoardText; live?: 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // body scroll belongs to the content layer only
+  // the landing scrolls its own tall board; snap mode settles on whole screens
   useEffect(() => {
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = mode === "full" ? "hidden" : "";
-    return () => { document.body.style.overflow = prev; };
-  }, [mode]);
+    document.documentElement.classList.toggle("fd-snap", mode === "full" && snap);
+    if (mode === "full") window.scrollTo(0, 0);
+    return () => { document.documentElement.classList.remove("fd-snap"); };
+  }, [mode, snap]);
 
   // route changed: reshape the board when the canvas has finished resizing
   useEffect(() => {
@@ -123,7 +138,12 @@ export function BoardShell({ text, live, children }: { text?: BoardText; live?: 
           ? "kjel.me: the landing is a flip-dot display. Links to work and about are laid over it."
           : "kjel.me masthead, a flip-dot strip with the clock and navigation."}
       />
-      <div ref={hotsRef} />
+      <div ref={hotsRef} className="fd-hots" />
+      {mode === "full" && docHeight > 0 && (
+        <div className="fd-scroll" style={{ height: docHeight }} aria-hidden>
+          {snap && Array.from({ length: SCREENS }, (_, i) => <div key={i} className="fd-snap-point" />)}
+        </div>
+      )}
       <main id="main" className="fd-main" hidden={mode === "full"} key={pathname} tabIndex={-1}>
         {children}
       </main>

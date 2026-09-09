@@ -4,7 +4,7 @@ import "./globals.css";
 import { VisitPing } from "@/components/VisitPing";
 import { BoardShell } from "@/components/BoardShell";
 import { getBoardText } from "@/lib/board";
-import { PROJECTS } from "@/content/work";
+import { PROJECTS, VERB } from "@/content/work";
 import { fetchRepo, ago } from "@/lib/github";
 import type { Live } from "@/components/board/scenes/kjel";
 
@@ -15,7 +15,10 @@ async function getLive(): Promise<Live> {
   let best = -1, when = "";
   repos.forEach((r, i) => { if (r && r.pushedAt > when) { when = r.pushedAt; best = i; } });
   const building = best >= 0 ? withRepo[best].title.toUpperCase() : (PROJECTS.find((p) => p.status === "building")?.title.toUpperCase() ?? "");
-  return { building, pushed: when ? ago(when).toUpperCase() : "", entries: PROJECTS.length, place: "BROOKLYN, NY" };
+  return {
+    building, pushed: when ? ago(when).toUpperCase() : "", entries: PROJECTS.length, place: "BROOKLYN, NY",
+    ledger: PROJECTS.map((p) => ({ slug: p.slug, title: p.title, state: VERB[p.status], since: p.started })),
+  };
 }
 
 const plexMono = IBM_Plex_Mono({

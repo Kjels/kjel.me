@@ -38,6 +38,12 @@ export type BoardOptions = {
   page?: string;
   /** false: no unlit grid. Only lit dots and their afterglow are drawn (pictograms) */
   grid?: boolean;
+  /** a board taller than the screen: total rows given the screen's rows and cols. The page scrolls it. */
+  virtualRows?: (rows: number, cols: number) => number;
+  /** current scroll position in px, read every frame when the board is virtual */
+  scrollOffset?: () => number;
+  /** called after every fit, e.g. to size the page to the virtual board */
+  onFit?: (b: Board) => void;
 };
 
 const HELV = '"Helvetica Neue", Helvetica, Arial, sans-serif';
@@ -54,6 +60,10 @@ export class Board {
   // geometry: W/H css px, SW/SH the raster source size, K its scale, cw/chh dot pitch
   W = 0; H = 0; SW = 0; SH = 0; K = 1;
   cols = 0; rows = 0; cw = 0; chh = 0;
+  /** total rows of the composition (== rows unless the board is virtual) and the window's first row */
+  vrows = 0; winRow = 0;
+  /** while true, hotspots are position:fixed (pinned to the screen) rather than in the document */
+  pinHots = false;
 
   /** the raster source: scenes draw images and vector marks here at scale K */
   readonly src = document.createElement("canvas");
@@ -166,7 +176,7 @@ export class Board {
 
   /** stamp text into the page; a `link` also lays a hotspot and gets a hover underline */
   stamp(text: string, col: number, row: number, scale: number, link?: string, micro?: boolean, underline?: boolean) {
-    const { cols, rows, cw, chh } = this;
+    const { cols, vrows, cw, chh } = this;
     const tm = this.textMask!;
     const gh = micro ? 5 : 7;
     const gf = micro ? glyphM : glyph;
@@ -177,7 +187,7 @@ export class Board {
         if (g[r][c] !== "1") continue;
         for (let sy = 0; sy < scale; sy++) for (let sx = 0; sx < scale; sx++) {
           const yy = row + r * scale + sy, xx = cx + c * scale + sx;
-          if (xx >= 0 && xx < cols && yy >= 0 && yy < rows) tm[yy * cols + xx] = 2;
+          if (xx >= 0 && xx < cols && yy >= 0 && yy < vrows) tm[yy * cols + xx] = 2;
         }
       }
       cx += (gw + 1) * scale;
@@ -187,7 +197,7 @@ export class Board {
       const uy = row + gh * scale + (scale > 1 ? 2 : 1);
       for (let c2 = 0; c2 < wCols; c2++) {
         const xx = col + c2;
-        if (xx >= 0 && xx < cols && uy >= 0 && uy < rows) tm[uy * cols + xx] = 2;
+        if (xx >= 0 && xx < cols && uy >= 0 && uy < vrows) tm[uy * cols + xx] = 2;
       }
     }
     if (link) {
@@ -211,37 +221,37 @@ export class Board {
 
   /** a 2x2 block at a brighter mask value: the current-page mark */
   marker(col: number, row: number) {
-    const { cols, rows } = this, tm = this.textMask!;
+    const { cols, vrows } = this, tm = this.textMask!;
     for (let dy = 0; dy < 2; dy++) for (let dx = 0; dx < 2; dx++) {
       const yy = row + dy, xx = col + dx;
-      if (xx >= 0 && xx < cols && yy >= 0 && yy < rows) tm[yy * cols + xx] = 4;
+      if (xx >= 0 && xx < cols && yy >= 0 && yy < vrows) tm[yy * cols + xx] = 4;
     }
   }
 
   /** stamp a pictogram (row strings) */
   stampG(pat: string[], col: number, row: number) {
-    const { cols, rows } = this, tm = this.textMask!;
+    const { cols, vrows } = this, tm = this.textMask!;
     for (let r = 0; r < pat.length; r++) for (let c = 0; c < pat[r].length; c++) {
       if (pat[r][c] !== "1") continue;
       const yy = row + r, xx = col + c;
-      if (xx >= 0 && xx < cols && yy >= 0 && yy < rows) tm[yy * cols + xx] = 2;
+      if (xx >= 0 && xx < cols && yy >= 0 && yy < vrows) tm[yy * cols + xx] = 2;
     }
   }
 
   block(col: number, row: number, w: number, h: number) {
-    const { cols, rows } = this, tm = this.textMask!;
+    const { cols, vrows } = this, tm = this.textMask!;
     for (let dy = 0; dy < h; dy++) for (let dx = 0; dx < w; dx++) {
       const yy = row + dy, xx = col + dx;
-      if (xx >= 0 && xx < cols && yy >= 0 && yy < rows) tm[yy * cols + xx] = 2;
+      if (xx >= 0 && xx < cols && yy >= 0 && yy < vrows) tm[yy * cols + xx] = 2;
     }
   }
 
   /** the smiley, optionally struck through like the J */
   stampSmiley(cx: number, cy: number, r: number, struck: boolean) {
-    const { cols, rows } = this, tm = this.textMask!;
+    const { cols, vrows } = this, tm = this.textMask!;
     const dot = (x: number, y: number) => {
       const xx = Math.round(x), yy = Math.round(y);
-      if (xx >= 0 && xx < cols && yy >= 0 && yy < rows) tm[yy * cols + xx] = 2;
+      if (xx >= 0 && xx < cols && yy >= 0 && yy < vrows) tm[yy * cols + xx] = 2;
     };
     const n = Math.max(20, Math.round(r * 8));
     for (let a = 0; a < n; a++) {
@@ -267,6 +277,11 @@ export class Board {
   hotAt(xs: number, ys: number, ws: number, hs: number, label: string, fn?: () => void, href?: string) {
     const a = document.createElement("a");
     a.className = "fd-hot";
+    // on a virtual board hotspots live in the document and scroll with it; pinned ones stay on screen
+    a.style.position = this.pinHots || this.vrows === this.rows ? "fixed" : "absolute";
+    // never past the board's edge: an overflowing hotspot would widen the page on phones
+    if (xs < 0) { ws += xs; xs = 0; }
+    ws = Math.max(0, Math.min(ws, this.W - xs));
     a.href = href || "#";
     a.setAttribute("aria-label", label);
     a.style.left = `${xs}px`; a.style.top = `${ys}px`;
@@ -274,6 +289,31 @@ export class Board {
     if (fn) a.addEventListener("click", (e) => { e.preventDefault(); fn(); });
     this.hots.appendChild(a);
     return a;
+  }
+
+  /**
+   * Pinned text: stamped into a screen-space layer (so it does not scroll with a virtual board)
+   * with a fixed hotspot and a hover underline. Call from compose; layers persist across frames.
+   */
+  pinLink(L: Layer, text: string, col: number, row: number, micro: boolean, link: string) {
+    const { cw, chh } = this;
+    this.stampInto(L.mask, text, col, row, 1, micro);
+    const gh = micro ? 5 : 7, wCols = micro ? measureM(text) : measureCols(text);
+    const rec: LinkRec = { page: "PIN:" + link, col, row, scale: 1, wCols, gh, hover: false, hoverP: 0 };
+    this.extraLinks = this.extraLinks.filter((l) => l.page !== rec.page);
+    this.extraLinks.push(rec);
+    const ext = this.opts.external?.[link], route = this.opts.routes?.[link];
+    const fn = ext ? undefined : route ? () => this.opts.onRoute?.(route) : () => this.navigate(link);
+    const hw = Math.max(44, wCols * cw + 12), hh2 = Math.max(44, gh * chh + 12);
+    const was = this.pinHots; this.pinHots = true;
+    const a = this.hotAt(col * cw + (wCols * cw) / 2 - hw / 2, row * chh + (gh * chh) / 2 - hh2 / 2, hw, hh2, link.toLowerCase(), fn, ext || route);
+    this.pinHots = was;
+    if (ext && !ext.startsWith("mailto:")) { a.target = "_blank"; a.rel = "noreferrer"; }
+    a.addEventListener("mouseenter", () => { rec.hover = true; });
+    a.addEventListener("mouseleave", () => { rec.hover = false; });
+    a.addEventListener("focus", () => { rec.hover = true; });
+    a.addEventListener("blur", () => { rec.hover = false; });
+    return wCols;
   }
 
   /** draw a PW×PH image onto the raster source centred on a screen point; sets the shimmer box */
@@ -306,40 +346,41 @@ export class Board {
   }
 
   private haloPass() {
-    const { cols, rows } = this, tm = this.textMask!;
-    for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) {
+    const { cols, vrows } = this, tm = this.textMask!;
+    for (let y = 0; y < vrows; y++) for (let x = 0; x < cols; x++) {
       if (tm[y * cols + x] < 2) continue;
       for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
         const xx = x + dx, yy = y + dy;
-        if (xx >= 0 && xx < cols && yy >= 0 && yy < rows && tm[yy * cols + xx] === 0) tm[yy * cols + xx] = 1;
+        if (xx >= 0 && xx < cols && yy >= 0 && yy < vrows && tm[yy * cols + xx] === 0) tm[yy * cols + xx] = 1;
       }
     }
   }
 
   /** run the scene's compose for a page, then derive everything the frame needs */
   compose(page = this.page) {
-    const { cols, rows, SW, SH, cw, chh } = this;
-    this.sctx.fillStyle = "#000"; this.sctx.fillRect(0, 0, SW, SH);
+    const { cols, vrows, SW, cw, chh } = this;
+    const SHv = this.src.height;
+    this.sctx.fillStyle = "#000"; this.sctx.fillRect(0, 0, SW, SHv);
     this.hots.innerHTML = "";
     this.links = [];
-    this.textMask = new Uint8Array(cols * rows);
+    this.textMask = new Uint8Array(cols * vrows);
     this.slashLine = null; this.faceBox = null;
     this.blank = false;
 
     this.opts.compose(this, page);
 
     this.haloPass();
-    this.cellLum = rasterToCells(this.sctx, SW, SH, cols, rows);
+    this.cellLum = rasterToCells(this.sctx, SW, SHv, cols, vrows);
 
     // slash lane through the J: a permanent cut, like the mark
     this.slashParam = null;
     const sl = this.slashLine as Line | null;
     if (sl) {
-      this.slashParam = new Float32Array(cols * rows).fill(NaN);
-      this.slashD = new Float32Array(cols * rows);
+      this.slashParam = new Float32Array(cols * vrows).fill(NaN);
+      this.slashD = new Float32Array(cols * vrows);
       const ax = sl.ax / cw, ay = sl.ay / chh, bx = sl.bx / cw, by = sl.by / chh;
       const dx = bx - ax, dy = by - ay, len2 = dx * dx + dy * dy;
-      for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) {
+      for (let y = 0; y < vrows; y++) for (let x = 0; x < cols; x++) {
         const t = ((x - ax) * dx + (y - ay) * dy) / len2;
         if (t < 0 || t > 1) continue;
         const px = ax + t * dx, py = ay + t * dy;
@@ -350,22 +391,22 @@ export class Board {
     }
 
     // where cursor guides may draw: only the true void, 2 dots clear of any content
-    let content = new Uint8Array(cols * rows);
+    let content = new Uint8Array(cols * vrows);
     const CL = this.cellLum, TM = this.textMask;
-    for (let i = 0; i < cols * rows; i++) content[i] = CL[i] > 0.3 || TM[i] >= 2 ? 1 : 0;
+    for (let i = 0; i < cols * vrows; i++) content[i] = CL[i] > 0.3 || TM[i] >= 2 ? 1 : 0;
     for (let p = 0; p < 2; p++) {
       const d2 = Uint8Array.from(content);
-      for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) {
+      for (let y = 0; y < vrows; y++) for (let x = 0; x < cols; x++) {
         if (content[y * cols + x]) continue;
         for (let dy = -1; dy <= 1 && !d2[y * cols + x]; dy++) for (let dx = -1; dx <= 1; dx++) {
           const xx = x + dx, yy = y + dy;
-          if (xx >= 0 && xx < cols && yy >= 0 && yy < rows && content[yy * cols + xx]) { d2[y * cols + x] = 1; break; }
+          if (xx >= 0 && xx < cols && yy >= 0 && yy < vrows && content[yy * cols + xx]) { d2[y * cols + x] = 1; break; }
         }
       }
       content = d2;
     }
-    this.guideOK = new Uint8Array(cols * rows);
-    for (let i = 0; i < cols * rows; i++) this.guideOK[i] = content[i] ? 0 : 1;
+    this.guideOK = new Uint8Array(cols * vrows);
+    for (let i = 0; i < cols * vrows; i++) this.guideOK[i] = content[i] ? 0 : 1;
   }
 
   /** flip to another page with the wipe; `silent` skips the URL callback (history navigation) */
@@ -381,7 +422,7 @@ export class Board {
   /** sweep every dot off and mute the layers; resolves when the wipe is done */
   wipeOut(): Promise<void> {
     return new Promise((res) => {
-      const n = this.cols * this.rows;
+      const n = this.cols * this.vrows;
       this.blank = true;
       this.hots.innerHTML = "";
       this.links = []; this.extraLinks = [];
@@ -404,7 +445,7 @@ export class Board {
   /** deal the whole board in from dark with one wipe */
   boot() {
     if (this.reduced) return;
-    this.prevLum = new Float32Array(this.cols * this.rows);
+    this.prevLum = new Float32Array(this.cols * this.vrows);
     this.prevMask = null;
     this.transStart = performance.now() / 1000;
   }
@@ -441,7 +482,8 @@ export class Board {
     let K = Math.min(1, 1100 / Math.max(W, H));
     this.SW = Math.max(8, Math.round(W * K)); this.SH = Math.max(8, Math.round(H * K));
     this.K = K = this.SW / W;
-    this.src.width = this.SW; this.src.height = this.SH;
+    this.vrows = Math.max(this.rows, this.opts.virtualRows ? Math.round(this.opts.virtualRows(this.rows, this.cols)) : this.rows);
+    this.src.width = this.SW; this.src.height = Math.round(this.SH * (this.vrows / this.rows));
     const n = this.cols * this.rows;
     this.dotV = new Float32Array(n);
     this.heat = new Float32Array(n);
@@ -449,6 +491,7 @@ export class Board {
     this.prevLum = null; this.prevMask = null; this.transStart = -1;
     for (const l of this.layers) { l.mask = new Uint8Array(n); l.halo = null; l.key = ""; }
     this.buildOffLayer();
+    this.opts.onFit?.(this);
   }
 
   resize() {
@@ -462,7 +505,7 @@ export class Board {
    */
   blankResize() {
     this.fit();
-    const n = this.cols * this.rows;
+    const n = this.cols * this.vrows;
     this.cellLum = new Float32Array(n); this.textMask = new Uint8Array(n);
     this.slashParam = null; this.faceBox = null;
     this.hots.innerHTML = ""; this.links = []; this.extraLinks = [];
@@ -533,37 +576,43 @@ export class Board {
     const slashParam = this.slashParam, slashD = this.slashD, faceBox = this.faceBox, guideOK = this.guideOK;
     const layers = this.layers, nL = layers.length;
     const dotV = this.dotV, heat = this.heat;
+    // a virtual board: the screen is a window `off` rows down the composition, moved a whole row at a time
+    if (this.vrows > rows && this.opts.scrollOffset) this.winRow = Math.max(0, Math.min(this.vrows - rows, Math.floor(this.opts.scrollOffset() / chh)));
+    else this.winRow = 0;
+    const off = this.winRow;
     for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) {
-      const i = y * cols + x;
-      const useOld = inTrans && prevLum !== null && x + hash2(x, y) * 8 > sweep;
+      const i = y * cols + x, vy = y + off, vi = vy * cols + x;
+      const useOld = inTrans && prevLum !== null && x + hash2(x, vy) * 8 > sweep;
       const L = useOld ? prevLum! : CL;
       const M = useOld ? prevMask : TM;
-      const m = M ? M[i] : 0;
+      const m = M ? M[vi] : 0;
       let target: number;
-      const sp = !useOld && slashParam ? slashParam[i] : NaN;
-      let lit = false;
-      if (!useOld) for (let k = 0; k < nL; k++) if (layers[k].mask[i]) { lit = true; break; }
-      if (m >= 2) target = 1;
+      const sp = !useOld && slashParam ? slashParam[vi] : NaN;
+      // dynamic layers (the pinned line, the clock, the cyclist) sit in front of everything;
+      // their halo is a dark ring that cuts whatever scrolls beneath them
+      let lit = false, haloed = false;
+      if (!useOld) for (let k = 0; k < nL; k++) { if (layers[k].mask[i]) { lit = true; break; } const h = layers[k].halo; if (h && h[i]) haloed = true; }
+      if (lit) target = 1;
+      else if (haloed) target = 0;
+      else if (m >= 2) target = 1;
       else if (m === 1) target = 0;
-      else if (lit) target = 1; // dynamic layers: the clock, the glider, the cyclist
       else if (sp === sp) {
         // the slash: a solid lit core with a dark channel cut around it
-        target = slashD![i] < 1 ? 1 : 0;
+        target = slashD![vi] < 1 ? 1 : 0;
       } else {
         // fixed threshold: typography never moves; only the portrait keeps its shimmer
         let thr = 0.42;
-        if (!reduced && !useOld && faceBox && x > faceBox.x0 && x < faceBox.x1 && y > faceBox.y0 && y < faceBox.y1) {
-          thr = 0.42 + 0.06 * Math.sin(t * 0.5 - x * 0.13 - y * 0.09);
+        if (!reduced && !useOld && faceBox && x > faceBox.x0 && x < faceBox.x1 && vy > faceBox.y0 && vy < faceBox.y1) {
+          thr = 0.42 + 0.06 * Math.sin(t * 0.5 - x * 0.13 - vy * 0.09);
         }
-        target = L[i] > thr ? 1 : 0;
-        if (target && !useOld) for (let k = 0; k < nL; k++) { const h = layers[k].halo; if (h && h[i]) { target = 0; break; } }
+        target = L[vi] > thr ? 1 : 0;
       }
       // cursor layers (C toggles): stamped text is untouchable; guides live in the void only
       if (trailV && trailV[i] > 0) {
         trailV[i] *= 0.9;
         if (!reduced && cursorMode === 1 && m === 0 && trailV[i] > 0.25) target = 1;
       }
-      if (!reduced && cursorMode === 2 && m === 0 && guideOK && guideOK[i] && mx > -9999 &&
+      if (!reduced && cursorMode === 2 && m === 0 && guideOK && guideOK[vi] && mx > -9999 &&
           (x === curCol || y === curRow) && (x + y) % 3 === 0) {
         target = 1;
       }

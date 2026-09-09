@@ -43,10 +43,13 @@ function life(seed: string[]): Picto {
   };
 }
 
-export const PICTOS: Record<string, Picto> = {
-  kims: life(["0111", "1110"]), // toad, period 2
-  "kjel-me": life(["010", "001", "111"]), // glider, moves
-  harness: life(["01111", "10001", "00001", "10010"]), // lightweight spaceship, moves
-  capture: life(["1100", "1000", "0001", "0011"]), // beacon, period 2
-  "sprint-orchestrator": life(["0010", "1010", "0101", "0100"]), // clock, period 2
+/** each project's lifeform, as seeded */
+export const SEEDS: Record<string, string[]> = {
+  kims: ["0111", "1110"], // toad, period 2
+  "kjel-me": ["010", "001", "111"], // glider, moves
+  harness: ["01111", "10001", "00001", "10010"], // lightweight spaceship, moves
+  capture: ["1100", "1000", "0001", "0011"], // beacon, period 2
+  "sprint-orchestrator": ["0010", "1010", "0101", "0100"], // clock, period 2
 };
+
+export const PICTOS: Record<string, Picto> = Object.fromEntries(Object.entries(SEEDS).map(([k, seed]) => [k, life(seed)]));
