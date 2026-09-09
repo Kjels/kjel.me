@@ -1,9 +1,9 @@
-// The about section of the landing, one line per entry. The board stamps them
-// in the 5x7 face, so keep to A-Z 0-9 . , ' - & ! ? / : and short sentences.
-// Nothing here should need changing next month: what's current lives in the ledger.
+// The about section of the landing, in Kjel's words, one line per entry.
+// The board stamps them in the 5x7 face: A-Z 0-9 . , ' - & ! ? / : only.
 export const ABOUT_LINES = [
-  "KJEL. THE J IS SILENT.",
-  "TECH SALES BY DAY: HALF GO-TO-MARKET ENGINEERING, HALF DOING THE DEALS.",
-  "BOARD GAMES WITH FRIENDS. A FIXED GEAR. READING. VIDEO GAMES.",
-  "AND WHATEVER THE FIXATION IS THIS MONTH. THAT PART IS IN THE LEDGER.",
+  "MY NAME IS KJEL - THE J IS SILENT.",
+  "I AM 27 YEARS OLD, LIVING IN BROOKLYN.",
+  "I WORK IN TECH SALES, STRADDLING GO-TO-MARKET ENGINEERING AND EXECUTION / BUSINESS DEVELOPMENT.",
+  "IN MY FREE TIME, I REALLY ENJOY BOARD GAMES WITH MY FRIENDS, TINKERING AND WORKING ON THE GIVEN FIXATION OR PROJECT, READING, PLAYING VIDEOGAMES - REALLY INTO RUNESCAPE AND DEADLOCK RIGHT NOW.",
+  "I LIKE MY FIXED GEAR BICYCLE.",
 ];
