@@ -80,10 +80,6 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
 
   const LN = 11; // the lifeforms' square
   let portrait: HTMLCanvasElement | null = null;
-  let wave: HTMLCanvasElement | null = null;
-  let waving = false;
-  // idle: after this many seconds without input the portrait waves, once every so often
-  const IDLE_AFTER = (() => { try { const q = parseFloat(new URLSearchParams(location.search).get("idle") || ""); return q > 0 ? q : 15; } catch { return 15; } })();
 
   /* ---------- laser eyes: click the portrait, the meme happens ---------- */
   const laser = {
@@ -379,7 +375,7 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
       b.drawMark(cap, colL * cw, H * 0.4);
       if (portrait) {
         // the portrait holds the upper-right; while idle it waves now and then
-        b.drawFace(waving && wave ? wave : portrait, W * 0.785, H * 0.375, 0.56);
+        b.drawFace(portrait, W * 0.785, H * 0.375, 0.56);
         const fb = b.faceBox!;
         // click the portrait: the eyes go laser (a dot-board rendition of the meme)
         b.hotAt(fb.x0 * cw, fb.y0 * chh, (fb.x1 - fb.x0) * cw, (fb.y1 - fb.y0) * chh,
@@ -626,15 +622,6 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
     b.haloOf(L);
   }
 
-  /* ---------- idle: the portrait waves ---------- */
-  function updateIdle(b: Board, t: number) {
-    if (current !== "HOME" || !wave || b.reduced) return;
-    const idle = t - b.lastInput;
-    // once idle, wave for 1.4s every 12s
-    const shouldWave = idle > IDLE_AFTER && ((idle - IDLE_AFTER) % 12) < 1.4;
-    if (shouldWave !== waving) { waving = shouldWave; b.compose(); }
-  }
-
   let markPinned = false;
   function updateMark(b: Board) {
     // once the big mark has scrolled off, a small KJEL. takes the top-left, a link back to the top
@@ -649,7 +636,6 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
     updateClock(b, t);
     updatePlay(b, t);
     updatePreview(b);
-    updateIdle(b, t);
     updateMark(b);
   }
 
@@ -659,8 +645,6 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
       portrait = p;
       b.compose();
       b.boot();
-      // the waving frame loads after; nothing waits on it
-      loadPortrait("/kjel-board-wave.jpg", (w) => { wave = w; });
     });
   }
 
