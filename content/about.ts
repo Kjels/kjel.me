@@ -1,9 +1,16 @@
-// The about section of the landing, in Kjel's words, one line per entry.
+// The about section of the landing. Plain lines, then interests as bullets.
 // The board stamps them in the 5x7 face: A-Z 0-9 . , ' - & ! ? / : only.
 export const ABOUT_LINES = [
-  "MY NAME IS KJEL - THE J IS SILENT.",
-  "I LIVE IN BROOKLYN.",
-  "I WORK IN TECH SALES, STRADDLING GO-TO-MARKET ENGINEERING AND EXECUTION / BUSINESS DEVELOPMENT.",
-  "IN MY FREE TIME, I REALLY ENJOY BOARD GAMES WITH MY FRIENDS, TINKERING AND WORKING ON THE GIVEN FIXATION OR PROJECT, READING, PLAYING VIDEOGAMES - REALLY INTO RUNESCAPE AND DEADLOCK RIGHT NOW.",
-  "I LIKE MY FIXED GEAR BICYCLE.",
+  "KJEL. THE J IS SILENT.",
+  "BROOKLYN.",
+  "I WORK IN TECH SALES.",
+];
+
+export const ABOUT_INTERESTS_LABEL = "INTERESTS INCLUDE";
+export const ABOUT_INTERESTS = [
+  "BOARD GAMES",
+  "TINKERING",
+  "READING",
+  "VIDEO GAMES",
+  "MY FIXED GEAR",
 ];

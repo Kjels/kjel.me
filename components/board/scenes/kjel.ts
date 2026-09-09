@@ -9,7 +9,7 @@ import { Board, type Layer, type LinkRec } from "../engine";
 import { DS, measureCols, measureM, wrap, wrapM, fit } from "../font";
 import { loadPortrait } from "../portrait";
 import { SEEDS } from "../pictos";
-import { ABOUT_LINES } from "@/content/about";
+import { ABOUT_LINES, ABOUT_INTERESTS, ABOUT_INTERESTS_LABEL } from "@/content/about";
 
 /** one project, as the board shows it: a ledger line on the landing, a page of its own */
 export type Entry = {
@@ -46,11 +46,16 @@ export function sectionRows(rows: number, cols: number, n: number) {
 export const entryLink = (slug: string) => "ENTRY:" + slug;
 
 const aboutMeasure = (cols: number, wide: boolean) => (wide ? Math.round(cols * 0.88) : cols - 6); // the full width between the gutters
-/** rows the about section needs: title, lines, place, links, air */
+/** about reads at double size on wide boards; single on phones, where double would fit five letters a line */
+const aboutScale = (wide: boolean) => (wide ? 2 : 1);
+/** rows the about section needs: title, lines, the interests, links, air */
 function aboutRows(cols: number, wide: boolean) {
-  let n = 14 + 28 + 12;
-  for (const para of ABOUT_LINES) n += wrap(para, 1, aboutMeasure(cols, wide)).length * 9 + 6;
-  return n + 4 + 10 + 7 + 24;
+  const sc = aboutScale(wide), lh = sc * 7 + (sc > 1 ? 4 : 2), m = aboutMeasure(cols, wide);
+  let n = SECTION_PAD(wide) + 28 + 12;
+  for (const para of ABOUT_LINES) n += wrap(para, sc, m).length * lh + 4;
+  n += 8 + lh + 4; // the label
+  for (const it of ABOUT_INTERESTS) n += wrap(it, sc, m - 8 * sc).length * lh + 2;
+  return n + 12 + 7 + 24;
 }
 
 /** the sections, in menu order; each is an HTML route */
@@ -238,7 +243,7 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
       b.stampInto(L.mask, mms, x, row, 1, true);
       // what's playing, to the right of the clock, when there is room for it
       if (nowTitle) {
-        const room = cols - 3 - navW - 10 - (x + measureM(mms) + 10);
+        const room = cols - 3 - navW - 10 - (x + measureM(mms) + 10) - 8; // less the disc mark
         const ttl = fit(nowTitle, true, room);
         if (ttl && room > 30) {
           const tx = x + measureM(mms) + 10;
@@ -484,16 +489,23 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
     });
     y = G.end;
 
-    // ABOUT
+    // ABOUT: plain lines, then the interests with the strike as the bullet
     y = S.ABOUT + SECTION_PAD(wide);
     b.stamp("ABOUT", colL, y, sc * 2, undefined, false, true);
     y += sc * 14 + 12;
-    const measure = aboutMeasure(cols, wide);
+    const measure = aboutMeasure(cols, wide), asc = aboutScale(wide), lh = asc * 7 + (asc > 1 ? 4 : 2);
     for (const para of ABOUT_LINES) {
-      for (const line of wrap(para, 1, measure)) { b.stamp(line, colL, y, 1); y += 9; }
-      y += 6;
+      for (const line of wrap(para, asc, measure)) { b.stamp(line, colL, y, asc); y += lh; }
+      y += 4;
     }
-    y += 4;
+    y += 8;
+    b.stamp(ABOUT_INTERESTS_LABEL, colL, y, asc); y += lh + 4;
+    for (const it of ABOUT_INTERESTS) {
+      b.stampG(DS.SOLIDUS, colL, y, asc);
+      for (const line of wrap(it, asc, measure - 8 * asc)) { b.stamp(line, colL + 8 * asc, y, asc); y += lh; }
+      y += 2;
+    }
+    y += 12;
     b.stamp(live?.place || "BROOKLYN, NY", colL, y, 1); y += 10;
     b.stamp("EMAIL", colL, y, 1, "EMAIL", true, true);
     b.stamp("GITHUB", colL + measureM("EMAIL") + 8, y, 1, "GITHUB", true, true);

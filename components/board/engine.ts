@@ -238,12 +238,14 @@ export class Board {
   }
 
   /** stamp a pictogram (row strings) */
-  stampG(pat: string[], col: number, row: number) {
+  stampG(pat: string[], col: number, row: number, scale = 1) {
     const { cols, vrows } = this, tm = this.textMask!;
     for (let r = 0; r < pat.length; r++) for (let c = 0; c < pat[r].length; c++) {
       if (pat[r][c] !== "1") continue;
-      const yy = row + r, xx = col + c;
-      if (xx >= 0 && xx < cols && yy >= 0 && yy < vrows) tm[yy * cols + xx] = 2;
+      for (let sy = 0; sy < scale; sy++) for (let sx = 0; sx < scale; sx++) {
+        const yy = row + r * scale + sy, xx = col + c * scale + sx;
+        if (xx >= 0 && xx < cols && yy >= 0 && yy < vrows) tm[yy * cols + xx] = 2;
+      }
     }
   }
 
