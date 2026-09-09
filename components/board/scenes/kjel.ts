@@ -9,6 +9,7 @@ import { Board, type Layer, type LinkRec } from "../engine";
 import { DS, measureCols, measureM, wrap, wrapM, fit } from "../font";
 import { loadPortrait } from "../portrait";
 import { SEEDS } from "../pictos";
+import { ABOUT_LINES } from "@/content/about";
 
 /** one project, as the board shows it: a ledger line on the landing, a page of its own */
 export type Entry = {
@@ -44,12 +45,6 @@ export function sectionRows(rows: number, cols: number, n: number) {
 /** route name for an entry link on the board */
 export const entryLink = (slug: string) => "ENTRY:" + slug;
 
-const ABOUT_LINES = [
-  "I BUILD SMALL SOFTWARE AND THE OCCASIONAL APPLIANCE.",
-  "RIGHT NOW: A KITCHEN SCALE WITH A SCREEN IN IT, A TMUX WORKSPACE THAT FOLLOWS ME BETWEEN MACHINES, AND THIS SIGN.",
-  "BY DAY I DESIGN THE OUTBOUND ENGINE AT HACKAJOB.",
-  "ROWER TURNED RUNNER. FIXED GEAR. BOARD GAMES THAT TAKE A WHOLE EVENING.",
-];
 const aboutMeasure = (cols: number, wide: boolean) => (wide ? Math.round(cols * 0.62) : cols - 6);
 /** rows the about section needs: title, lines, place, links, air */
 function aboutRows(cols: number, wide: boolean) {
