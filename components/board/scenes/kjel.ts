@@ -9,6 +9,9 @@ import { Board, type Layer, type LinkRec } from "../engine";
 import { DS, measureCols, measureM, wrapM, fit } from "../font";
 import { loadPortrait } from "../portrait";
 
+/** what the ledger knows right now, for the landing's live line and menu previews */
+export type Live = { building: string; pushed: string; entries: number; place: string };
+
 /** the sections, in menu order; each is an HTML route */
 export const NAV = ["WORK", "ABOUT"];
 export const ROUTES: Record<string, string> = { HOME: "/", WORK: "/work", ABOUT: "/about" };
@@ -29,11 +32,15 @@ const MONTHS = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "
 // pupil positions as fractions of the portrait frame
 const EYES: [number, number][] = [[0.386, 0.276], [0.55, 0.274]];
 
-export function createKjelScene(TXT: BoardText) {
+export function createKjelScene(TXT: BoardText, live?: Live) {
   const ROLES = TXT.roles; // sequential, never random: a first visit reads the sane ones first
-  const external: Record<string, string> = { LINKEDIN: TXT.linkedin, EMAIL: TXT.email };
+  const external: Record<string, string> = {};
 
   let portrait: HTMLCanvasElement | null = null;
+  let wave: HTMLCanvasElement | null = null;
+  let waving = false;
+  // idle: after this many seconds without input the portrait waves, once every so often
+  const IDLE_AFTER = (() => { try { const q = parseFloat(new URLSearchParams(location.search).get("idle") || ""); return q > 0 ? q : 15; } catch { return 15; } })();
 
   /* ---------- laser eyes: click the portrait, the meme happens ---------- */
   const laser = {
@@ -189,6 +196,17 @@ export function createKjelScene(TXT: BoardText) {
       if (reduced || ss % 2 === 0) b.stampInto(L.mask, ":", x, row, 1, true);
       x += measureM(":") + 2;
       b.stampInto(L.mask, mms, x, row, 1, true);
+      // what's playing, to the right of the clock, when there is room for it
+      if (nowTitle) {
+        const room = cols - 3 - navW - 10 - (x + measureM(mms) + 10);
+        const ttl = fit(nowTitle, true, room);
+        if (ttl && room > 30) {
+          const tx = x + measureM(mms) + 10;
+          const logo = ["01110", "10001", "01110", "10001", "01110"]; // a tiny disc
+          for (let r = 0; r < 5; r++) for (let c = 0; c < 5; c++) if (logo[r][c] === "1") { const xx = tx + c, yy = row + r; if (xx < cols && yy < rows) L.mask[yy * cols + xx] = 1; }
+          b.stampInto(L.mask, ttl, tx + 8, row, 1, true);
+        }
+      }
       L.halo = null;
       return;
     }
@@ -312,8 +330,8 @@ export function createKjelScene(TXT: BoardText) {
       const cap = Math.min(H * 0.26, (W * 0.5) / 2.9);
       b.drawMark(cap, colL * cw, H * 0.4);
       if (portrait) {
-        // the portrait holds the upper-right
-        b.drawFace(portrait, W * 0.785, H * 0.375, 0.56);
+        // the portrait holds the upper-right; while idle it waves now and then
+        b.drawFace(waving && wave ? wave : portrait, W * 0.785, H * 0.375, 0.56);
         const fb = b.faceBox!;
         // click the portrait: the eyes go laser (a dot-board rendition of the meme)
         b.hotAt(fb.x0 * cw, fb.y0 * chh, (fb.x1 - fb.x0) * cw, (fb.y1 - fb.y0) * chh,
@@ -326,11 +344,18 @@ export function createKjelScene(TXT: BoardText) {
       let irow = Math.round(rows * 0.5);
       for (const para of TXT.home) {
         for (const line of wrapM(para, mIntro)) {
-          if (irow + 5 > rows - 24) break;
+          if (irow + 5 > rows - 36) break;
           b.stamp(line, colL, irow, 1, undefined, true);
           irow += 8;
         }
         irow += 4;
+      }
+      // the live line: what the ledger is building, and when it last moved.
+      // it shares the clock's baseline; the cyclist passes beneath it.
+      if (live?.building) {
+        b.stamp("NOW BUILDING", colL, rows - 33, 1, undefined, true);
+        const w = b.stamp(live.building, colL, rows - 26, 1, "WORK");
+        if (live.pushed) b.stamp("PUSHED " + live.pushed, colL + w + 6, rows - 25, 1, undefined, true);
       }
     } else {
       const colL = 3;
@@ -379,9 +404,45 @@ export function createKjelScene(TXT: BoardText) {
     else composeStrip(b, page.split(":")[1] || "");
   }
 
+  /* ---------- menu previews: hover a section, the board says what's there ---------- */
+  let preview: Layer | null = null;
+
+  function updatePreview(b: Board) {
+    const L = (preview ??= b.layer());
+    const { cols, rows, wide } = b;
+    if (current !== "HOME" || !wide) { if (L.key !== "off") { L.key = "off"; L.mask.fill(0); } return; }
+    const hot = b.links.find((l) => l.hover && NAV.includes(l.page));
+    const key = hot ? hot.page : "none";
+    if (key === L.key) return;
+    L.key = key;
+    L.mask.fill(0);
+    if (!hot) return;
+    const text = hot.page === "WORK"
+      ? (live ? `${live.entries} ENTRIES` + (live.pushed ? ` · PUSHED ${live.pushed}` : "") : "THE LEDGER")
+      : (live?.place || "BROOKLYN, NY");
+    // to the left of the menu, on its line, so it never touches the portrait
+    const right = Math.round(cols * 0.94);
+    const gap = 6;
+    const menuW = NAV.reduce((a, wd) => a + measureM(wd) + gap, 0) - gap;
+    const w = measureM(text);
+    b.stampInto(L.mask, text, Math.max(0, right - menuW - 10 - w), 3, 1, true);
+    b.haloOf(L);
+  }
+
+  /* ---------- idle: the portrait waves ---------- */
+  function updateIdle(b: Board, t: number) {
+    if (current !== "HOME" || !wave || b.reduced) return;
+    const idle = t - b.lastInput;
+    // once idle, wave for 1.4s every 12s
+    const shouldWave = idle > IDLE_AFTER && ((idle - IDLE_AFTER) % 12) < 1.4;
+    if (shouldWave !== waving) { waving = shouldWave; b.compose(); }
+  }
+
   function tick(b: Board, t: number) {
     updateClock(b, t);
     updatePlay(b, t);
+    updatePreview(b);
+    updateIdle(b, t);
   }
 
   /** fetch the portrait, then recompose and deal the board in */
@@ -390,6 +451,8 @@ export function createKjelScene(TXT: BoardText) {
       portrait = p;
       b.compose();
       b.boot();
+      // the waving frame loads after; nothing waits on it
+      loadPortrait("/kjel-board-wave.jpg", (w) => { wave = w; });
     });
   }
 

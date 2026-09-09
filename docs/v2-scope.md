@@ -78,9 +78,9 @@ Done in phase 0: media wall remnants, guestbook, books (board pages, `/admin`, `
 
 **2. Content layer.** Done 2026-09-08. `@next/mdx`, `content/work/index.ts` manifest + one MDX per project, `content/about.mdx`, `lib/github.ts` (roadmap + repo metadata, hourly, `GITHUB_TOKEN` optional), `DotBar` progress. `/writing` not routed yet.
 
-**3. Landing.** Live strip. Nav tiles. Three or four of the playful candidates. Wave on arrival.
+**3. Landing.** Done 2026-09-09. Live line from GitHub (NOW BUILDING · PUSHED), hover previews beside the menu (entries count, place), idle wave after 15s using `kjel-board-wave.jpg`, now-playing in the strip. The sweep stays the transition.
 
-**4. Polish.** OG image per page (board-rendered for `/`, typographic for the rest). `sitemap`, `robots.txt`. `/config` trimmed to the fields that still exist. Visit emails keep working, skip `/admin` and `/config` as today.
+**4. Polish.** Done 2026-09-09. OG image (the mark in the 5x7 face, one dot per cell), `sitemap`, `robots`, `/config` trimmed to three fields, interface-guidelines pass (focus, targets, motion, theme colour, skip link, 404).
 
 Suggested order of effort: 0 is an afternoon. 1 is the risky one and unblocks everything. 2 is the bulk. 3 is the fun. 4 is a day.
 

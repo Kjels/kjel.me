@@ -1,7 +1,12 @@
+import { BOARD_DEFAULTS } from "@/lib/board-text";
+
 // The landing is the board itself (mounted in the root layout). This route
 // only carries the text a search engine or screen reader should find.
 export default function Home() {
   return (
-    <h1 className="sr-only">Kjel Schlemmer. A personal site, still in progress. Part design experiment, part shelf for projects and fixations.</h1>
+    <div className="sr-only">
+      <h1>Kjel Schlemmer</h1>
+      {BOARD_DEFAULTS.home.map((line) => <p key={line}>{line.toLowerCase()}</p>)}
+    </div>
   );
 }

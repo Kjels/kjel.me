@@ -35,10 +35,15 @@ export function Picto({ slug, className }: { slug: string; className?: string })
     });
     board.cursorMode = 0; // the cursor trail belongs to the landing
     board.resize();
-    board.start();
+    // run only while on screen and the tab is visible
+    let onScreen = false;
+    const sync = () => { if (onScreen && document.visibilityState === "visible") board.start(); else board.pause(); };
+    const io = new IntersectionObserver(([e]) => { onScreen = e.isIntersecting; sync(); }, { rootMargin: "80px" });
+    io.observe(canvas);
+    document.addEventListener("visibilitychange", sync);
     const ro = new ResizeObserver(() => board.resize());
     ro.observe(canvas);
-    return () => { ro.disconnect(); board.destroy(); };
+    return () => { io.disconnect(); ro.disconnect(); document.removeEventListener("visibilitychange", sync); board.destroy(); };
   }, [slug]);
 
   return (

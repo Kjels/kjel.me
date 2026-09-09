@@ -37,12 +37,13 @@ Ordered by value. Checked items are done.
 - [x] **Interface guidelines pass** (vercel-labs/web-interface-guidelines): focus rings, 44px targets, touch-action, theme colour, color-scheme, skip link, reduced motion, tabular numbers, curly quotes, anchored headings, a 404 with exits
 - [ ] **Push the project repos** so `/work` can read their roadmaps. Until then the progress bars are empty
 - [ ] **Photos for KIMS** and any other project page that needs them
-- [ ] **Landing.** Live strip, reactive nav tiles, idle behaviour
-- [ ] **Semantic shadow layer** for the landing: emit the board copy as visually-hidden HTML plus `<noscript>`
+- [x] **Landing.** Live line (what the ledger is building, last push), menu previews on hover, idle wave using the second portrait, now-playing in the strip
+- [x] Landing carries its copy as visually-hidden HTML
+- [ ] Pictogram boards pause offscreen and in hidden tabs (done); consider the same for the landing board
 - [ ] **Extract the engine** (`components/board/`) as a standalone package with a demo page. The `Board` class already has the API; it needs a build and a README
 - [ ] **Revisit the bistable renderer** once the engine is modular. Measured at 1.65s → 0.19s main-thread per 5s idle before it was reverted
-- [ ] OG image, `robots.txt`, `sitemap`
-- [ ] Trim `/config` to the fields the board still uses (home copy, roles, place, links)
+- [x] OG image in the board's face, `robots.txt`, `sitemap`
+- [x] `/config` trimmed to home copy, phone copy, roles
 
 ## Non-goals
 

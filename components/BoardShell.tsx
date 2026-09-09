@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { BOARD_DEFAULTS, type BoardText } from "@/lib/board-text";
 import { Board } from "./board/engine";
-import { createKjelScene, NAV, STRIP_ROWS, STRIP_H, ROUTES, sectionFor } from "./board/scenes/kjel";
+import { createKjelScene, NAV, STRIP_ROWS, STRIP_H, ROUTES, sectionFor, type Live } from "./board/scenes/kjel";
 
 type Mode = "full" | "strip";
 const modeFor = (path: string): Mode => (path === "/" ? "full" : "strip");
@@ -14,7 +14,7 @@ const modeFor = (path: string): Mode => (path === "/" ? "full" : "strip");
 // Leaving the landing: the dots wipe off, the route changes, the canvas
 // shrinks to the strip, the strip deals in, the content rises. Coming back
 // reverses it.
-export function BoardShell({ text, children }: { text?: BoardText; children: React.ReactNode }) {
+export function BoardShell({ text, live, children }: { text?: BoardText; live?: Live; children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -24,6 +24,7 @@ export function BoardShell({ text, children }: { text?: BoardText; children: Rea
   const pathRef = useRef(pathname);
   const transitRef = useRef(false);
   const textRef = useRef(text);
+  const liveRef = useRef(live);
   const [mode, setMode] = useState<Mode>(modeFor(pathname));
   const [ready, setReady] = useState(false);
 
@@ -32,7 +33,7 @@ export function BoardShell({ text, children }: { text?: BoardText; children: Rea
 
   // build the board once
   useEffect(() => {
-    const scene = createKjelScene(textRef.current || BOARD_DEFAULTS);
+    const scene = createKjelScene(textRef.current || BOARD_DEFAULTS, liveRef.current);
     const board = new Board({
       canvas: canvasRef.current!,
       hots: hotsRef.current!,

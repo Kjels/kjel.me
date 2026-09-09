@@ -88,6 +88,9 @@ export class Board {
   fx: Fx | null = null;
 
   cursorMode = 1; // C cycles: 0 none · 1 trail · 2 guides
+  /** performance.now()/1000 of the last pointer or key input */
+  lastInput = 0;
+  private paused = false;
   private mx = -1e4; private my = -1e4; private pmx = -1e4; private pmy = -1e4;
   private raf = 0;
   private readonly off: (() => void)[] = [];
@@ -106,10 +109,13 @@ export class Board {
       window.addEventListener(k, fn, o);
       this.off.push(() => window.removeEventListener(k, fn));
     };
-    on("keydown", (e) => { if (e.key === "c" || e.key === "C") this.cursorMode = (this.cursorMode + 1) % 3; });
-    on("mousemove", (e) => { this.mx = e.clientX; this.my = e.clientY; });
+    const touch = () => { this.lastInput = performance.now() / 1000; };
+    this.lastInput = performance.now() / 1000;
+    on("keydown", (e) => { touch(); if (e.key === "c" || e.key === "C") this.cursorMode = (this.cursorMode + 1) % 3; });
+    on("mousemove", (e) => { touch(); this.mx = e.clientX; this.my = e.clientY; });
     on("mouseout", () => { this.mx = -1e4; this.my = -1e4; });
-    on("touchmove", (e) => { if (e.touches[0]) { this.mx = e.touches[0].clientX; this.my = e.touches[0].clientY; } }, { passive: true });
+    on("touchmove", (e) => { touch(); if (e.touches[0]) { this.mx = e.touches[0].clientX; this.my = e.touches[0].clientY; } }, { passive: true });
+    on("touchstart", touch, { passive: true });
     on("touchend", () => { this.mx = -1e4; this.my = -1e4; });
     on("resize", () => this.resize());
   }
@@ -468,7 +474,15 @@ export class Board {
   }
 
   start() {
+    this.paused = false;
+    cancelAnimationFrame(this.raf);
     this.raf = requestAnimationFrame(this.frame);
+  }
+
+  /** stop the frame loop (offscreen, hidden tab); start() resumes */
+  pause() {
+    this.paused = true;
+    cancelAnimationFrame(this.raf);
   }
 
   destroy() {
@@ -620,6 +634,6 @@ export class Board {
         ctx.fill();
       }
     }
-    this.raf = requestAnimationFrame(this.frame);
+    if (!this.paused) this.raf = requestAnimationFrame(this.frame);
   };
 }
