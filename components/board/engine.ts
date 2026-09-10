@@ -183,12 +183,16 @@ export class Board {
   /** enter the Life editor (an empty grid, scroll locked), or leave it if it is open */
   toggleLife() {
     if (this.life) { this.stopLife(); return; }
-    // a cell should be about 18px across whatever the dot pitch is
-    const k = Math.max(2, Math.round(18 / this.cw));
+    // a cell should be about 18px across whatever the dot pitch is, and closer to 26px for a finger
+    const coarse = window.matchMedia("(pointer: coarse)").matches;
+    const k = Math.max(2, Math.round((coarse ? 26 : 18) / this.cw));
     const gw = Math.ceil(this.cols / k), gh = Math.ceil(this.rows / k), n = gw * gh;
     this.life = { cells: new Uint8Array(n), next: new Uint8Array(n), at: 0, gen: 0, running: false, k, gw, gh };
     this.lifeOverflow = document.documentElement.style.overflow;
     document.documentElement.style.overflow = "hidden";
+    // a finger on the board paints; it must not scroll
+    document.documentElement.style.touchAction = "none";
+    this.canvas.style.touchAction = "none";
     this.lastInput = performance.now() / 1000;
   }
 
@@ -197,6 +201,8 @@ export class Board {
     this.life = null;
     this.painting = false;
     document.documentElement.style.overflow = this.lifeOverflow;
+    document.documentElement.style.touchAction = "";
+    this.canvas.style.touchAction = "";
   }
 
   /** run or pause the automaton */

@@ -28,7 +28,7 @@ export function GlassCard({ id, onClose }: { id: string | null; onClose: () => v
       <div className="glass-back" data-glass onPointerDown={onClose} aria-hidden />
       <section ref={ref} className="glass" data-glass role="dialog" aria-labelledby="glass-title" tabIndex={-1}>
         <button type="button" className="glass-close" onClick={onClose}><DotText text="CLOSE" micro color={GREY} scale={0.55} /></button>
-        <h2 id="glass-title" className="glass-title"><DotText text={card.title} color={GREEN} /></h2>
+        <h2 id="glass-title" className="glass-title"><DotText text={card.title} color={GREEN} fit className="glass-dots" /></h2>
         <div className="glass-body">{card.intro}</div>
         {card.rules && (
           <ul className="glass-rules">

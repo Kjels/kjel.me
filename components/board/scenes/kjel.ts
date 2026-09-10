@@ -466,6 +466,7 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
       // a glider laps a 7x7 torus beside it. it shares the clock's baseline
       const lw = b.stamp("GAME OF LIFE", colL, rows - 26, 1, "LIFE");
       b.tint(colL, rows - 26, colL + lw, rows - 19, (t, x) => b.lifeColor(t, x));
+      lifeWordAt = { x: colL, y: rows - 26 };
       gliderAt = { x: colL + lw + 6, y: rows - 26 };
       b.tint(gliderAt.x, gliderAt.y, gliderAt.x + 7, gliderAt.y + 7, (t, x) => b.lifeColor(t, x));
     } else {
@@ -481,6 +482,13 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
         }
         irow += 4;
       }
+      // GAME OF LIFE in the small face, the glider beside it, above the role and the clock
+      const ly = Math.min(irow + 4, rows - 62);
+      const lw = b.stamp("GAME OF LIFE", colL, ly, 1, "LIFE", true);
+      b.tint(colL, ly, colL + lw, ly + 5, (t, x) => b.lifeColor(t, x));
+      lifeWordAt = { x: colL, y: ly };
+      gliderAt = { x: colL + lw + 6, y: ly - 1 };
+      b.tint(gliderAt.x, gliderAt.y, gliderAt.x + 7, gliderAt.y + 7, (t, x) => b.lifeColor(t, x));
     }
     if (b.vrows > rows) composeBelow(b);
   }
@@ -533,7 +541,7 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
         b.stamp(e.title.toUpperCase(), nx, ly, 1, entryLink(e.slug)); ly += 7 + 4;
         for (const line of wrapM((e.lines[0] || e.blurb).toUpperCase(), t.w - 8).slice(0, 2)) { b.stamp(line, nx, ly, 1, undefined, true); ly += 8; }
         ly += 3;
-        for (const sp of specs) { b.stamp(sp, nx, ly, 1, undefined, true); ly += 8; }
+        for (const sp of specs.slice(0, 2)) { b.stamp(sp, nx, ly, 1, undefined, true); ly += 8; } // state and since; the rest is on the entry
       }
       const nameRec = b.links[b.links.length - 1];
       // the whole box is the link; hovering it lights the name
@@ -588,18 +596,21 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
     const colL = wide ? Math.round(cols * 0.06) : 3, sc = wide ? 3 : 2;
     // the text column stops short of the big number on the right
     const measure = wide ? Math.round(cols * 0.55) : cols - 6;
-    const title = wrap(e.title.toUpperCase(), sc, wide ? Math.round(cols * 0.55) : cols - 6);
+    // narrow boards set the name in the small face at double size, so seven letters still fit the width
+    const titleMicro = !wide;
+    const title = wide ? wrap(e.title.toUpperCase(), sc, Math.round(cols * 0.55)) : [e.title.toUpperCase()];
+    const titleH = titleMicro ? sc * 5 + 4 : sc * 7 + 4;
     const blurb = wrap(e.blurb.toUpperCase(), 1, measure);
     const fun = e.lines.flatMap((l) => wrapM(l, measure));
-    const metaText = [e.state, "SINCE " + e.since, e.gen, e.pushed ? "PUSHED " + e.pushed : null].filter(Boolean).join("  ");
-    const meta = wrapM(metaText, measure);
+    const metaItems = [e.state, "SINCE " + e.since, e.gen, e.pushed ? "PUSHED " + e.pushed : null].filter(Boolean) as string[];
+    const meta = wide ? wrapM(metaItems.join("  "), measure) : metaItems; // one item a line when narrow
     let y = wide ? Math.round(rows * 0.1) : 30;
-    const yTitle = y; y += title.length * (sc * 7 + 4) + 6;
+    const yTitle = y; y += title.length * titleH + 6;
     const yMeta = y; y += meta.length * 8 + 6;
     const yBlurb = y; y += blurb.length * 9 + 6;
     const yFun = y; y += fun.length * 8 + 10;
     const yLinks = y; y += 7 + 14;
-    return { wide, colL, sc, measure, title, blurb, fun, meta, yTitle, yMeta, yBlurb, yFun, yLinks, height: y };
+    return { wide, colL, sc, measure, title, titleMicro, titleH, blurb, fun, meta, yTitle, yMeta, yBlurb, yFun, yLinks, height: y };
   }
 
   function composeEntry(b: Board, slug: string) {
@@ -623,7 +634,7 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
     const { colL, sc } = L;
     let y = L.yTitle;
     // the name
-    for (const line of L.title) { b.stamp(line, colL, y, sc, undefined, false, true); y += sc * 7 + 4; }
+    for (const line of L.title) { b.stamp(line, colL, y, sc, undefined, L.titleMicro, true); y += L.titleH; }
     // the meta line, wrapped when the board is narrow
     y = L.yMeta; for (const m of L.meta) { b.stamp(m, colL, y, 1, undefined, true); y += 8; }
     // the one-liner
@@ -636,7 +647,7 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
       const no = String(idx + 1).padStart(2, "0"), nsc = wide ? 6 : 3;
       const w = measureCols(no) * nsc;
       if (wide) b.stamp(no, Math.round(cols * 0.78) - Math.floor(w / 2), Math.round(rows * 0.4) - Math.floor(7 * nsc / 2), nsc);
-      else if (L.title.length === 1 && colL + measureCols(L.title[0]) * sc + 6 + w <= cols - 3) b.stamp(no, cols - 3 - w, L.yTitle, nsc);
+      else if (L.title.length === 1 && colL + (L.titleMicro ? measureM : measureCols)(L.title[0]) * sc + 6 + w <= cols - 3) b.stamp(no, cols - 3 - w, L.yTitle, nsc);
     }
     // links follow the text
     const ly = L.yLinks; let lx = colL;
@@ -725,12 +736,13 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
 
   /* ---------- the glider: a 7x7 torus beside the word, lapping forever ---------- */
   let gliderAt: { x: number; y: number } | null = null;
+  let lifeWordAt: { x: number; y: number } = { x: 0, y: 0 }; // where composeHome put the word; the editor's controls hang off it
   let glider: Layer | null = null;
   let gliderCells = new Uint8Array(49), gliderNext = new Uint8Array(49), gliderGen = -1, gliderAtT = 0;
   const GLIDER = [[1, 0], [2, 1], [0, 2], [1, 2], [2, 2]];
   function updateGlider(b: Board, t: number) {
     const L = (glider ??= b.layer());
-    const on = current === "HOME" && b.wide && b.winRow < 2 && !b.life && gliderAt;
+    const on = current === "HOME" && b.winRow < 2 && !b.life && gliderAt;
     if (!on) { if (L.key !== "off") { L.key = "off"; L.mask.fill(0); } gliderGen = -1; return; }
     if (gliderGen < 0) { gliderCells.fill(0); for (const [x, y] of GLIDER) gliderCells[y * 7 + x] = 1; gliderGen = 0; gliderAtT = t; }
     else if (!b.reduced && t - gliderAtT > 0.3) {
@@ -757,7 +769,7 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
   function updateLife(b: Board) {
     const C = (lifeC ??= b.layer()), N = (lifeN ??= b.layer());
     const life = b.life;
-    const on = !!life && current === "HOME" && b.wide;
+    const on = !!life && current === "HOME";
     if (!on) {
       if (lifeCKey !== "off") {
         lifeCKey = lifeNKey = "off";
@@ -769,7 +781,7 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
       }
       return;
     }
-    const { cols, rows } = b, colL = Math.round(cols * 0.06), y = rows - 26;
+    const { wide } = b, { x: colL, y } = lifeWordAt;
     const ck = life!.running ? "run" : "edit";
     if (ck !== lifeCKey) {
       lifeCKey = ck;
@@ -778,12 +790,21 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
       lifeHots = [];
       b.extraLinks = b.extraLinks.filter((l) => !l.page.startsWith("PIN:LIFE:"));
       // the word stays where it was (its own hotspot is still there and leaves the editor)
-      let x = colL;
-      b.stampInto(C.mask, "GAME OF LIFE", x, y, 1); x += measureCols("GAME OF LIFE") + 10;
       const n0 = b.hots.childElementCount;
-      b.pinLink(C, life!.running ? "PAUSE" : "PLAY", x, y + 2, true, "LIFE:PLAY"); x += measureM("PAUSE") + 8;
-      b.pinLink(C, "CLEAR", x, y + 2, true, "LIFE:CLEAR");
-      b.pinLink(C, "WHAT IS THIS", colL, y + 10, true, "LIFE:INFO"); // under the word, clear of the clock
+      if (wide) {
+        let x = colL;
+        b.stampInto(C.mask, "GAME OF LIFE", x, y, 1); x += measureCols("GAME OF LIFE") + 10;
+        b.pinLink(C, life!.running ? "PAUSE" : "PLAY", x, y + 2, true, "LIFE:PLAY"); x += measureM("PAUSE") + 8;
+        b.pinLink(C, "CLEAR", x, y + 2, true, "LIFE:CLEAR");
+        b.pinLink(C, "WHAT IS THIS", colL, y + 10, true, "LIFE:INFO");
+      } else {
+        // narrow: the word in the small face, the buttons stacked beneath it
+        b.stampInto(C.mask, "GAME OF LIFE", colL, y, 1, true);
+        let x = colL;
+        b.pinLink(C, life!.running ? "PAUSE" : "PLAY", x, y + 9, true, "LIFE:PLAY"); x += measureM("PAUSE") + 8;
+        b.pinLink(C, "CLEAR", x, y + 9, true, "LIFE:CLEAR");
+        b.pinLink(C, "WHAT IS THIS", colL, y + 18, true, "LIFE:INFO");
+      } // under the word, clear of the clock
       lifeHots = Array.from(b.hots.children).slice(n0) as HTMLAnchorElement[];
       b.haloOf(C);
     }
@@ -793,7 +814,7 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
       N.mask.fill(0);
       // only the generation count while it runs; WHAT IS THIS covers the rest
       const lines = life!.running ? [nk] : [];
-      let ny = y - 2 - lines.length * 7;
+      let ny = wide ? y - 2 - lines.length * 7 : y + 27; // above the word when wide, under the buttons when narrow
       for (const line of lines) { b.stampInto(N.mask, line, colL, ny, 1, true); ny += 7; }
       b.haloOf(N);
     }

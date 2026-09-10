@@ -6,16 +6,20 @@ import { ON } from "./board/palette";
 
 // Text in the sign's own face, drawn as dots on a small canvas. The pitch follows the board's
 // (--dot, set by the shell on every fit), so a word here is the same size as the same word out there.
-export function DotText({ text, micro = false, color = ON, pitch, scale = 1, className }: {
-  text: string; micro?: boolean; color?: string; pitch?: number; scale?: number; className?: string;
+export function DotText({ text, micro = false, color = ON, pitch, scale = 1, fit = false, className }: {
+  text: string; micro?: boolean; color?: string; pitch?: number; scale?: number;
+  /** shrink the pitch so the word fits its container's width (a card on a phone) */
+  fit?: boolean; className?: string;
 }) {
   const ref = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
     const c = ref.current;
     if (!c) return;
     const draw = () => {
-      const p = (pitch ?? (parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--dot")) || 6)) * scale;
+      let p = (pitch ?? (parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--dot")) || 6)) * scale;
       const cols = micro ? measureM(text) : measureCols(text), rows = micro ? 5 : 7;
+      const avail = fit ? c.parentElement?.clientWidth ?? 0 : 0;
+      if (fit && avail > 0 && cols * p > avail) p = avail / cols;
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
       c.width = Math.ceil(cols * p * dpr); c.height = Math.ceil(rows * p * dpr);
       c.style.width = `${cols * p}px`; c.style.height = `${rows * p}px`;
@@ -37,7 +41,7 @@ export function DotText({ text, micro = false, color = ON, pitch, scale = 1, cla
     draw();
     window.addEventListener("resize", draw);
     return () => window.removeEventListener("resize", draw);
-  }, [text, micro, color, pitch, scale]);
+  }, [text, micro, color, pitch, scale, fit]);
   return (
     <span className={className}>
       <canvas ref={ref} aria-hidden />
