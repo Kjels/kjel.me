@@ -112,7 +112,8 @@ export class Board {
 
   cursorMode = 1; // C cycles: 0 none · 1 trail · 2 guides
   /** Conway's Life over the screen grid, seeded from whatever the dots show. null when off */
-  life: { cells: Uint8Array; next: Uint8Array; at: number; gen: number; running: boolean } | null = null;
+  /** cells live on a coarser lattice than the dots: k dots per cell, gw×gh cells, so a cell is a real click target */
+  life: { cells: Uint8Array; next: Uint8Array; at: number; gen: number; running: boolean; k: number; gw: number; gh: number } | null = null;
   /** performance.now()/1000 of the last pointer or key input */
   lastInput = 0;
   private paused = false;
@@ -150,7 +151,7 @@ export class Board {
       if (!this.painting || !this.life) return;
       // walk from the last point so a fast drag leaves no gaps
       const x0 = this.paintX, y0 = this.paintY, x1 = e.clientX, y1 = e.clientY;
-      const n = Math.max(1, Math.ceil(Math.hypot(x1 - x0, y1 - y0) / Math.min(this.cw, this.chh)));
+      const n = Math.max(1, Math.ceil(Math.hypot(x1 - x0, y1 - y0) / (Math.min(this.cw, this.chh) * this.life.k)));
       for (let k = 0; k <= n; k++) { const i = this.cellAt(x0 + ((x1 - x0) * k) / n, y0 + ((y1 - y0) * k) / n); if (i >= 0) this.life.cells[i] = this.paintTo; }
       this.paintX = x1; this.paintY = y1;
     });
@@ -180,8 +181,10 @@ export class Board {
   /** enter the Life editor (an empty grid, scroll locked), or leave it if it is open */
   toggleLife() {
     if (this.life) { this.stopLife(); return; }
-    const n = this.cols * this.rows;
-    this.life = { cells: new Uint8Array(n), next: new Uint8Array(n), at: 0, gen: 0, running: false };
+    // a cell should be about 18px across whatever the dot pitch is
+    const k = Math.max(2, Math.round(18 / this.cw));
+    const gw = Math.ceil(this.cols / k), gh = Math.ceil(this.rows / k), n = gw * gh;
+    this.life = { cells: new Uint8Array(n), next: new Uint8Array(n), at: 0, gen: 0, running: false, k, gw, gh };
     this.lifeOverflow = document.documentElement.style.overflow;
     document.documentElement.style.overflow = "hidden";
     this.lastInput = performance.now() / 1000;
@@ -204,10 +207,12 @@ export class Board {
   private paintTo = 1;
   private paintX = 0; private paintY = 0;
 
-  /** screen index of the dot under a client point, -1 outside */
+  /** index of the Life cell under a client point, -1 outside or when Life is off */
   private cellAt(x: number, y: number) {
-    const c = Math.floor(x / this.cw), r = Math.floor(y / this.chh);
-    return c < 0 || c >= this.cols || r < 0 || r >= this.rows ? -1 : r * this.cols + c;
+    const L = this.life;
+    if (!L) return -1;
+    const c = Math.floor(x / (this.cw * L.k)), r = Math.floor(y / (this.chh * L.k));
+    return c < 0 || c >= L.gw || r < 0 || r >= L.gh ? -1 : r * L.gw + c;
   }
 
   /** true when the event landed on a link hotspot or an HTML card rather than the board */
@@ -220,7 +225,7 @@ export class Board {
   card(id: string | null) { this.cardOpen = !!id; this.opts.onCard?.(id); }
 
   private stepLife() {
-    const L = this.life!, { cols, rows } = this, a = L.cells, b = L.next;
+    const L = this.life!, cols = L.gw, rows = L.gh, a = L.cells, b = L.next;
     for (let y = 0; y < rows; y++) {
       const yu = (y === 0 ? rows - 1 : y - 1) * cols, yd = (y === rows - 1 ? 0 : y + 1) * cols, yc = y * cols;
       for (let x = 0; x < cols; x++) {
@@ -770,7 +775,7 @@ export class Board {
         const span = rp.x1 - rp.x0 + 4, head = rp.p * span, u = x - rp.x0 + hash2(x, ry) * 2;
         if (u < head && u > head - span * 0.3) target = 1 - target;
       }
-      if (life && !lit && !haloed) target = life.cells[i] || (i === lifeCur ? 1 : 0);
+      if (life && !lit && !haloed) { const ci = ((y / life.k) | 0) * life.gw + ((x / life.k) | 0); target = life.cells[ci] || (ci === lifeCur ? 1 : 0); }
       const pv = dotV[i];
       dotV[i] += (target - dotV[i]) * (reduced ? 1 : 0.38);
       const v = dotV[i];
@@ -812,15 +817,16 @@ export class Board {
     for (const tb of this.tints) {
       for (let vy = Math.max(tb.y0, off); vy < Math.min(tb.y1, off + rows); vy++) for (let x = Math.max(0, tb.x0); x < Math.min(cols, tb.x1); x++) {
         const y = vy - off, i = y * cols + x;
-        if (dotV[i] > 0.5 && (!life || !life.cells[i])) dot(x, y, tb.color(t, x, vy));
+        if (dotV[i] > 0.5 && (!life || !life.cells[((y / life.k) | 0) * life.gw + ((x / life.k) | 0)])) dot(x, y, tb.color(t, x, vy));
       }
     }
     if (life) {
-      for (let i = 0, n = cols * rows; i < n; i++) {
-        if (!life.cells[i] || dotV[i] <= 0.5) continue;
+      for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) {
+        const i = y * cols + x;
+        if (dotV[i] <= 0.5 || !life.cells[((y / life.k) | 0) * life.gw + ((x / life.k) | 0)]) continue;
         let under = false;
         for (let q = 0; q < nL; q++) if (layers[q].mask[i]) { under = true; break; }
-        if (!under) dot(i % cols, (i / cols) | 0, this.lifeColor(t, i % cols));
+        if (!under) dot(x, y, this.lifeColor(t, x));
       }
     }
 

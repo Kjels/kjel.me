@@ -66,29 +66,30 @@ html.fd-snap { scroll-snap-type: y mandatory; }
   .fd-main > * { animation: none; }
 }
 
-/* ---- glass cards: HTML over the board, for what the dots cannot say ---- */
+/* ---- glass cards: a pane laid on the board, for what the dots cannot say ---- */
+/* sharp like the grid, a hairline edge, no eyebrow, no footnote. frosted-glass approximation, solid under reduced transparency */
 .glass-back { position: fixed; inset: 0; z-index: 5; }
 .glass {
   position: fixed; z-index: 6;
-  left: 6vw; bottom: 28vh; width: min(34rem, 88vw);
-  padding: 22px 26px 20px; border-radius: 14px;
+  left: 6vw; bottom: 28vh; width: min(30rem, 88vw);
+  padding: 26px 28px 26px; border-radius: 0;
   color: var(--fg);
-  background: rgba(18, 18, 18, 0.58);
-  -webkit-backdrop-filter: blur(18px) saturate(1.3); backdrop-filter: blur(18px) saturate(1.3);
-  border: 1px solid rgba(244, 244, 242, 0.14);
-  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(244, 244, 242, 0.06);
-  animation: glass-in 0.28s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  background: rgba(20, 20, 20, 0.62);
+  -webkit-backdrop-filter: blur(20px) saturate(1.25); backdrop-filter: blur(20px) saturate(1.25);
+  border: 1px solid var(--rule);
+  box-shadow: inset 0 1px 0 rgba(244, 244, 242, 0.08), 0 24px 60px rgba(10, 10, 10, 0.45);
+  animation: glass-in 0.26s cubic-bezier(0.2, 0.7, 0.2, 1) both;
   outline: none;
 }
 @media (max-width: 720px) { .glass { left: 5vw; right: 5vw; width: auto; bottom: 12vh; } }
-@keyframes glass-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
-.glass-head { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 14px; }
-.glass-close { background: none; border: 0; padding: 12px; margin: -12px; color: var(--fg2); cursor: pointer; }
+@keyframes glass-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.glass:focus-visible { outline: none; }
+.glass-close { position: absolute; top: 14px; right: 14px; background: none; border: 0; padding: 10px 12px; font: inherit; font-size: 13px; color: var(--fg2); cursor: pointer; }
 .glass-close:hover { color: var(--fg); }
-.glass-title { margin: 0 0 12px; font-size: 22px; font-weight: 500; letter-spacing: -0.01em; line-height: 1.2; }
-.glass-body p { margin: 0 0 12px; font-size: 15px; line-height: 1.55; color: var(--fg); }
+.glass-lead { margin: 0 0 14px; padding-right: 64px; font-size: 17px; font-weight: 500; line-height: 1.35; letter-spacing: -0.005em; }
+.glass-body p { margin: 0 0 12px; font-size: 15px; line-height: 1.55; color: var(--fg2); max-width: 62ch; }
 .glass-body p:last-child { margin-bottom: 0; }
-.glass-foot { margin: 16px 0 0; font-size: 11px; color: var(--fg3); }
+@media (prefers-reduced-transparency: reduce) { .glass { background: var(--raised); -webkit-backdrop-filter: none; backdrop-filter: none; } }
 @media (prefers-reduced-motion: reduce) { .glass { animation: none; } }
 
 /* ---- content layer ---- */
