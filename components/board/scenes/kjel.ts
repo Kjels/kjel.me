@@ -288,6 +288,104 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
     b.haloOf(L);
   }
 
+  // the jolly roger: 15 wide, 17 tall
+  const SKULL = [
+    ".....#####.....",
+    "....#######....",
+    "...#########...",
+    "...##.###.##...",
+    "...##.###.##...",
+    "...#########...",
+    "....##.#.##....",
+    ".....#####.....",
+    ".....#.#.#.....",
+    "...............",
+    "##...........##",
+    ".###.......###.",
+    "...###...###...",
+    ".....#####.....",
+    "...###...###...",
+    ".###.......###.",
+    "##...........##",
+  ];
+
+  /* ---------- the flag: a jolly roger fluttering beside the ABOUT title ---------- */
+  let flag: Layer | null = null;
+  function updateFlag(b: Board, t: number) {
+    const L = (flag ??= b.layer());
+    L.cold = true; // it moves every frame: no afterglow
+    const { cols, rows, wide, reduced } = b;
+    const on = current === "HOME" && wide && !b.life;
+    const off = () => { if (L.key !== "off") { L.key = "off"; L.mask.fill(0); } };
+    if (!on) return off();
+    // the top-right of the about section, beside the title, in board rows; then into the window
+    const S = sectionRows(rows, cols, (live?.ledger ?? []).length);
+    const y0 = S.ABOUT + SECTION_PAD(true) - 4 - b.winRow;
+    const FH = 20, FW = 36, POLE = 30;
+    if (y0 + POLE < 0 || y0 >= rows) return off();
+    const px = Math.round(cols * 0.94) - FW - 1;
+    const frame = reduced ? 0 : Math.floor(t * 10);
+    const key = `${y0}|${frame}`;
+    if (key === L.key) return;
+    L.key = key;
+    L.mask.fill(0);
+    const put = (x: number, y: number) => { if (x >= 0 && x < cols && y >= 0 && y < rows) L.mask[y * cols + x] = 1; };
+    for (let r = 0; r < POLE; r++) put(px, y0 + r);
+    put(px - 1, y0); put(px + 1, y0);
+    // each column of the flag rides its own wave, still at the hoist, three rows at the fly
+    const wave = (c: number) => (reduced ? 0 : Math.round(Math.sin(t * 5.5 - c * 0.28) * (c / FW) * 3));
+    const fy = y0 + 2;
+    for (let c = 1; c <= FW; c++) {
+      const w = wave(c);
+      put(px + c, fy + w); put(px + c, fy + FH + w);
+      if (c === FW) for (let r = 0; r <= FH; r++) put(px + c, fy + r + w);
+    }
+    const ex = px + 1 + Math.floor((FW - SKULL[0].length) / 2), ey = fy + 1 + Math.floor((FH - 1 - SKULL.length) / 2);
+    for (let r = 0; r < SKULL.length; r++) for (let c = 0; c < SKULL[r].length; c++) {
+      if (SKULL[r][c] === "#") put(ex + c, ey + r + wave(ex + c - px));
+    }
+  }
+
+  // Kilroy was here. 27 wide, 11 tall: the wall is row 6; the nose and the fingers hang below it
+  const KILROY = [
+    "...........#####...........",
+    ".........##.....##.........",
+    "........#.........#........",
+    ".......#...........#.......",
+    ".......#..#.....#..#.......",
+    ".......#.....#.....#.......",
+    "###########..#..###########",
+    ".##.##.##....#..##.##.##...",
+    ".##.##.##....#..##.##.##...",
+    ".............##............",
+    "..............#............",
+  ];
+
+  /* ---------- Kilroy, peeking over the bottom edge of the page ---------- */
+  let kilroy: Layer | null = null;
+  function updateKilroy(b: Board, t: number) {
+    const L = (kilroy ??= b.layer());
+    const { cols, rows, reduced } = b;
+    const on = current === "HOME" && !b.life;
+    const off = () => { if (L.key !== "off") { L.key = "off"; L.mask.fill(0); } };
+    if (!on) return off();
+    // the wall is the last row but four of the whole page; he blinks now and then
+    const y0 = b.vrows - 8 - 6 - b.winRow; // the wall sits eight rows up from the very bottom of the page
+    if (y0 + KILROY.length < 0 || y0 >= rows) return off();
+    const blink = !reduced && (t % 5.3) < 0.18;
+    const key = `${y0}|${blink ? 1 : 0}`;
+    if (key === L.key) return;
+    L.key = key;
+    L.mask.fill(0);
+    const x0 = Math.round(cols / 2) - 13;
+    for (let r = 0; r < KILROY.length; r++) for (let c = 0; c < KILROY[r].length; c++) {
+      if (KILROY[r][c] !== "#") continue;
+      if (blink && r === 4 && (c === 10 || c === 16)) continue;
+      const x = x0 + c, y = y0 + r;
+      if (x >= 0 && x < cols && y >= 0 && y < rows) L.mask[y * cols + x] = 1;
+    }
+  }
+
   /* ---------- the cyclist lapping the bottom of home ---------- */
   let play: Layer | null = null;
 
@@ -339,13 +437,15 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
     const p2 = ped ? [xo + 11, yb + 13] : [xo + 9, yb + 11];
     line(xo + 9, yb + 6, p1[0], p1[1]);
     line(xo + 9, yb + 6, p2[0], p2[1]);
-    // behind the text: the rider yields to the clock, role, and date
+    // behind the text: the rider passes behind the words of the page, and yields to the clock, role, and date
     const cm = clock?.mask;
-    if (cm) {
+    {
       for (let y = Math.max(0, yb - 2); y < Math.min(rows, yb + 16); y++)
         for (let x = Math.max(0, xo - 2); x < Math.min(cols, xo + 25); x++) {
           const i = y * cols + x;
           if (!pm[i]) continue;
+          if (b.textAt(x, y)) { pm[i] = 0; continue; }
+          if (!cm) continue;
           let near = false;
           for (let dy = -1; dy <= 1 && !near; dy++) for (let dx = -1; dx <= 1; dx++) {
             const xx = x + dx, yy = y + dy;
@@ -751,6 +851,8 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
     updateMark(b);
     updateGlider(b, t);
     updateTicker(b, t);
+    updateFlag(b, t);
+    updateKilroy(b, t);
     updateLife(b);
   }
 

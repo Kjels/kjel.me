@@ -239,6 +239,13 @@ export class Board {
     L.cells = b; L.next = a; L.gen++;
   }
 
+  /** what the composition holds at a screen cell: 0 nothing, 1 the dark halo around text, 2 text. Layers use it to pass behind words */
+  textAt(x: number, y: number) {
+    const tm = this.textMask;
+    if (!tm || x < 0 || x >= this.cols || y < 0 || y >= this.rows) return 0;
+    return tm[(y + this.winRow) * this.cols + x];
+  }
+
   /* ---------- dynamic layers ---------- */
 
   layer(): Layer {
