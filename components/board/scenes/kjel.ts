@@ -397,8 +397,12 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
         }
         irow += 4;
       }
-      // LIFE: opens a blank board to seed by hand and run. it shares the clock's baseline
-      b.stamp("LIFE", colL, rows - 26, 1, "LIFE");
+      // GAME OF LIFE: the one coloured thing on the board. opens a blank board to seed and run.
+      // a glider laps a 7x7 torus beside it. it shares the clock's baseline
+      const lw = b.stamp("GAME OF LIFE", colL, rows - 26, 1, "LIFE");
+      b.tint(colL, rows - 26, colL + lw, rows - 19, (t, x) => b.lifeColor(t, x));
+      gliderAt = { x: colL + lw + 6, y: rows - 26 };
+      b.tint(gliderAt.x, gliderAt.y, gliderAt.x + 7, gliderAt.y + 7, (t, x) => b.lifeColor(t, x));
     } else {
       const colL = 3;
       const titleTop = 13 + 14;
@@ -619,18 +623,46 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
     b.haloOf(L);
   }
 
+  /* ---------- the glider: a 7x7 torus beside the word, lapping forever ---------- */
+  let gliderAt: { x: number; y: number } | null = null;
+  let glider: Layer | null = null;
+  let gliderCells = new Uint8Array(49), gliderNext = new Uint8Array(49), gliderGen = -1, gliderAtT = 0;
+  const GLIDER = [[1, 0], [2, 1], [0, 2], [1, 2], [2, 2]];
+  function updateGlider(b: Board, t: number) {
+    const L = (glider ??= b.layer());
+    const on = current === "HOME" && b.wide && b.winRow < 2 && !b.life && gliderAt;
+    if (!on) { if (L.key !== "off") { L.key = "off"; L.mask.fill(0); } gliderGen = -1; return; }
+    if (gliderGen < 0) { gliderCells.fill(0); for (const [x, y] of GLIDER) gliderCells[y * 7 + x] = 1; gliderGen = 0; gliderAtT = t; }
+    else if (!b.reduced && t - gliderAtT > 0.3) {
+      for (let y = 0; y < 7; y++) for (let x = 0; x < 7; x++) {
+        let n = 0;
+        for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (dx || dy) n += gliderCells[((y + dy + 7) % 7) * 7 + ((x + dx + 7) % 7)];
+        gliderNext[y * 7 + x] = n === 3 || (n === 2 && gliderCells[y * 7 + x]) ? 1 : 0;
+      }
+      [gliderCells, gliderNext] = [gliderNext, gliderCells]; gliderGen++; gliderAtT = t;
+    }
+    const key = "g" + gliderGen;
+    if (key === L.key) return;
+    L.key = key;
+    L.mask.fill(0);
+    const { cols, rows } = b, g = gliderAt!;
+    for (let y = 0; y < 7; y++) for (let x = 0; x < 7; x++) if (gliderCells[y * 7 + x]) { const xx = g.x + x, yy = g.y + y; if (xx < cols && yy < rows) L.mask[yy * cols + xx] = 1; }
+  }
+
   /* ---------- life: the controls and the note, in two layers over a blank board ---------- */
   let lifeC: Layer | null = null; // the word and the buttons: rebuilt when a button's label changes
   let lifeN: Layer | null = null; // the note or the generation count: rebuilt as it changes
   let lifeHots: HTMLAnchorElement[] = [];
   let lifeCKey = "off", lifeNKey = "off";
+  let lifeInfo = false;
+  const LIFE_INFO = "CONWAY'S GAME OF LIFE, 1970. CELLS ON A GRID, ALIVE OR DEAD. EACH TICK: A LIVE CELL WITH 2 OR 3 LIVE NEIGHBOURS LIVES ON. A DEAD CELL WITH EXACTLY 3 IS BORN. EVERYTHING ELSE DIES. NO PLAYER, NO GOAL. TRY A ROW OF THREE, A 2 BY 2 BLOCK, OR THE GLIDER BESIDE THE WORD.";
   function updateLife(b: Board) {
     const C = (lifeC ??= b.layer()), N = (lifeN ??= b.layer());
     const life = b.life;
     const on = !!life && current === "HOME" && b.wide;
     if (!on) {
       if (lifeCKey !== "off") {
-        lifeCKey = lifeNKey = "off";
+        lifeCKey = lifeNKey = "off"; lifeInfo = false;
         C.mask.fill(0); C.halo = null; N.mask.fill(0); N.halo = null;
         for (const a of lifeHots) a.remove();
         lifeHots = [];
@@ -648,19 +680,23 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
       b.extraLinks = b.extraLinks.filter((l) => !l.page.startsWith("PIN:LIFE:"));
       // the word stays where it was (its own hotspot is still there and leaves the editor)
       let x = colL;
-      b.stampInto(C.mask, "LIFE", x, y, 1); x += measureCols("LIFE") + 10;
+      b.stampInto(C.mask, "GAME OF LIFE", x, y, 1); x += measureCols("GAME OF LIFE") + 10;
       const n0 = b.hots.childElementCount;
       b.pinLink(C, life!.running ? "PAUSE" : "PLAY", x, y + 2, true, "LIFE:PLAY"); x += measureM("PAUSE") + 8;
       b.pinLink(C, "CLEAR", x, y + 2, true, "LIFE:CLEAR");
+      b.pinLink(C, "WHAT IS THIS", colL, y + 10, true, "LIFE:INFO"); // under the word, clear of the clock
       lifeHots = Array.from(b.hots.children).slice(n0) as HTMLAnchorElement[];
       b.haloOf(C);
     }
-    const nk = life!.running ? "GEN " + life!.gen : "edit";
+    const nk = (lifeInfo ? "info|" : "") + (life!.running ? "GEN " + life!.gen : "edit");
     if (nk !== lifeNKey) {
       lifeNKey = nk;
       N.mask.fill(0);
       // the note wraps short of the clock on the right
-      const lines = life!.running ? [nk] : wrapM("CLICK A DOT TO FLIP IT. DRAG TO PAINT. THEN PLAY.", Math.round(cols * 0.5) - colL);
+      const m = Math.round(cols * 0.62) - colL;
+      const lines = lifeInfo
+        ? [...wrapM(LIFE_INFO, m), "", ...(life!.running ? ["GEN " + life!.gen] : [])]
+        : life!.running ? ["GEN " + life!.gen] : wrapM("CLICK A DOT TO FLIP IT. DRAG TO PAINT. THEN PLAY.", m);
       let ny = y - 2 - lines.length * 7;
       for (const line of lines) { b.stampInto(N.mask, line, colL, ny, 1, true); ny += 7; }
       b.haloOf(N);
@@ -682,6 +718,7 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
     updatePlay(b, t);
     updatePreview(b);
     updateMark(b);
+    updateGlider(b, t);
     updateLife(b);
   }
 
@@ -700,7 +737,7 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
 
   return {
     compose, tick, load, destroy, external,
-    actions: { LIFE: (b: Board) => b.toggleLife(), "LIFE:PLAY": (b: Board) => b.lifePlay(), "LIFE:CLEAR": (b: Board) => b.lifeClear() } as Record<string, (b: Board) => void>,
+    actions: { LIFE: (b: Board) => b.toggleLife(), "LIFE:PLAY": (b: Board) => b.lifePlay(), "LIFE:CLEAR": (b: Board) => b.lifeClear(), "LIFE:INFO": () => { lifeInfo = !lifeInfo; } } as Record<string, (b: Board) => void>,
     rows: (W: number, H: number) => (W / H > 1.05 ? 141 : 153),
     /** total rows of the tall landing: home, the ledger, then what about needs */
     height: (rows: number, cols: number) => sectionRows(rows, cols, (live?.ledger ?? []).length).ABOUT + Math.max(rows, aboutRows(cols, cols / rows > 1.05)),

@@ -105,6 +105,8 @@ export class Board {
   extraLinks: LinkRec[] = [];
   layers: Layer[] = [];
   fx: Fx | null = null;
+  /** boxes of the composition (virtual rows) whose lit dots take a colour */
+  tints: { x0: number; y0: number; x1: number; y1: number; color: (t: number, x: number, y: number) => string }[] = [];
 
   cursorMode = 1; // C cycles: 0 none · 1 trail · 2 guides
   /** Conway's Life over the screen grid, seeded from whatever the dots show. null when off */
@@ -160,6 +162,16 @@ export class Board {
   }
 
   get wide() { return this.W / this.H > 1.05; }
+
+  /** colour the lit dots inside a box of the composition; cleared by compose */
+  tint(x0: number, y0: number, x1: number, y1: number, color: (t: number, x: number, y: number) => string) {
+    this.tints.push({ x0, y0, x1, y1, color });
+  }
+
+  /** the one colour on the board: phosphor green with a shimmer running along x */
+  lifeColor(t: number, x: number) {
+    return `rgba(96,255,140,${(0.6 + 0.4 * Math.sin(t * 2.4 - x * 0.22)).toFixed(3)})`;
+  }
 
   /* ---------- life: a blank board you seed by hand, then run ---------- */
 
@@ -446,6 +458,7 @@ export class Board {
   /** run the scene's compose for a page, then derive everything the frame needs */
   compose(page = this.page) {
     this.stopLife();
+    this.tints = [];
     const { cols, vrows, SW, cw, chh } = this;
     const SHv = this.src.height;
     this.sctx.fillStyle = "#000"; this.sctx.fillRect(0, 0, SW, SHv);
@@ -779,6 +792,28 @@ export class Board {
       ctx.beginPath();
       ctx.ellipse(x * cw + cw / 2, y * chh + chh / 2, cw * 0.42 * sx, chh * 0.42, 0, 0, Math.PI * 2);
       ctx.fill();
+    }
+
+    // tinted dots: the boxes the scene marked, and every live cell in Life
+    const dot = (x: number, y: number, color: string) => {
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.ellipse(x * cw + cw / 2, y * chh + chh / 2, cw * 0.42, chh * 0.42, 0, 0, Math.PI * 2);
+      ctx.fill();
+    };
+    for (const tb of this.tints) {
+      for (let vy = Math.max(tb.y0, off); vy < Math.min(tb.y1, off + rows); vy++) for (let x = Math.max(0, tb.x0); x < Math.min(cols, tb.x1); x++) {
+        const y = vy - off, i = y * cols + x;
+        if (dotV[i] > 0.5 && (!life || !life.cells[i])) dot(x, y, tb.color(t, x, vy));
+      }
+    }
+    if (life) {
+      for (let i = 0, n = cols * rows; i < n; i++) {
+        if (!life.cells[i] || dotV[i] <= 0.5) continue;
+        let under = false;
+        for (let q = 0; q < nL; q++) if (layers[q].mask[i]) { under = true; break; }
+        if (!under) dot(i % cols, (i / cols) | 0, this.lifeColor(t, i % cols));
+      }
     }
 
     // coloured overlay (the laser eyes): fades with fx.p, flickers while on
