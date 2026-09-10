@@ -24,7 +24,8 @@ export const SCREENS = 3;
 /** the section a menu word scrolls to, in screens */
 export const SECTION: Record<string, number> = { HOME: 0, WORK: 1, ABOUT: 2 };
 /** the ledger is tiles: one full-width box per project, all the same shape */
-const TILE_H = 48, TILE_GAP = 5, WORK_HEAD = 14 + 28 + 12;
+// the ledger is a departures board: one row per project between dotted hairlines, columns aligned down the board
+const ROW_H = 32, ROW_H_NARROW = 48, TILE_GAP = 0, WORK_HEAD = 14 + 28 + 12;
 /** rows from a section's start to its title: clear of the pinned band on narrow boards */
 const SECTION_PAD = (wide: boolean) => (wide ? 14 : 26);
 function tileGrid(rows: number, cols: number, n: number) {
@@ -32,7 +33,7 @@ function tileGrid(rows: number, cols: number, n: number) {
   const colL = wide ? Math.round(cols * 0.06) : 3, right = wide ? Math.round(cols * 0.94) : cols - 3;
   const per = 1;
   const tw = right - colL;
-  const th = wide ? TILE_H : 70;
+  const th = wide ? ROW_H : ROW_H_NARROW;
   const top = rows + (wide ? WORK_HEAD : SECTION_PAD(false) + 14 + 12);
   const tiles = Array.from({ length: n }, (_, i) => ({ x: colL + (i % per) * (tw + TILE_GAP), y: top + Math.floor(i / per) * (th + TILE_GAP), w: tw, h: th }));
   return { tiles, end: top + Math.ceil(n / per) * (th + TILE_GAP) + 12, wide };
@@ -513,47 +514,46 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
     b.stamp("WORK", colL, y, sc * 2, undefined, false, true);
     const entries = live?.ledger ?? [];
     const G = tileGrid(rows, cols, entries.length);
+    const rr = wide ? Math.round(cols * 0.94) : cols - 3;
+    const rule = (ry: number) => { for (let x = colL; x < rr; x += 2) b.block(x, ry, 1, 1); };
+    ledgerRows = [];
     entries.forEach((e, i) => {
       const t = G.tiles[i];
-      // the box: a single-dot border
-      for (let x = t.x; x < t.x + t.w; x++) { b.block(x, t.y, 1, 1); b.block(x, t.y + t.h - 1, 1, 1); }
-      for (let yy = t.y; yy < t.y + t.h; yy++) { b.block(t.x, yy, 1, 1); b.block(t.x + t.w - 1, yy, 1, 1); }
+      if (i) rule(t.y); // the title's own rule serves the first row
       const no = String(i + 1).padStart(2, "0");
-      const specs = [e.state, "SINCE " + e.since, e.gen, e.pushed ? "PUSHED " + e.pushed : null].filter(Boolean) as string[];
       if (wide) {
-        // the index, big, in the left of the box
-        b.stamp(no, t.x + 6, t.y + Math.floor((t.h - 21) / 2), 3);
-        const nx = t.x + 6 + measureCols(no) * 3 + 10, right = t.x + t.w - 5;
-        let ly = t.y + 7;
-        b.stamp(e.title.toUpperCase(), nx, ly, 2, entryLink(e.slug)); ly += 14 + 5;
-        // one short line with some character; the one-liner lives on the entry
-        const tag = (e.lines[0] || e.blurb).toUpperCase();
-        for (const line of wrap(tag, 1, right - nx).slice(0, 1)) { b.stamp(line, nx, ly, 1); ly += 9; }
-        // the bottom line: the specs, right-aligned, in the small face
-        const by = t.y + t.h - 10;
-        let spec = specs.join("   "), sw = measureM(spec);
-        while (sw > right - nx - 40 && specs.length > 2) { specs.pop(); spec = specs.join("   "); sw = measureM(spec); }
-        b.stamp(spec, right - sw, by, 1, undefined, true);
-        if (specs[0] === "LIVE") b.tint(right - sw, by, right - sw + measureM("LIVE"), by + 5, (t, x) => b.lifeColor(t, x));
+        // index small at the margin, the name the only large thing, the line beneath it; state and date at the rr
+        const ny = t.y + 7, nx = colL + measureM(no) + 8;
+        b.stamp(no, colL, ny + 2, 1, undefined, true);
+        b.stamp(e.title.toUpperCase(), nx, ny, 2, entryLink(e.slug));
+        const ly = ny + 14 + 4;
+        const sinceW = measureM("SINCE " + e.since), stateW = measureM(e.state);
+        const lineMax = rr - Math.max(sinceW, stateW) - 12 - nx;
+        b.stamp(fit((e.lines[0] || e.blurb).toUpperCase(), true, lineMax), nx, ly, 1, undefined, true);
+        b.stamp(e.state, rr - stateW, ny + 2, 1, undefined, true);
+        if (e.state === "LIVE") b.tint(rr - stateW, ny + 2, rr, ny + 7, (t, x) => b.lifeColor(t, x));
+        b.stamp("SINCE " + e.since, rr - sinceW, ly, 1, undefined, true);
+        ledgerRows.push({ x: nx, y: ly, w: lineMax, lines: e.lines.map((l) => l.toUpperCase()), hover: 0 });
       } else {
-        b.stamp(no, t.x + 4, t.y + 5, 2);
-        const nx = t.x + 4;
-        let ly = t.y + 5 + 14 + 6;
-        b.stamp(e.title.toUpperCase(), nx, ly, 1, entryLink(e.slug)); ly += 7 + 4;
-        for (const line of wrapM((e.lines[0] || e.blurb).toUpperCase(), t.w - 8).slice(0, 2)) { b.stamp(line, nx, ly, 1, undefined, true); ly += 8; }
-        ly += 3;
-        for (const sp of specs.slice(0, 2)) { // state and since; the rest is on the entry
-          b.stamp(sp, nx, ly, 1, undefined, true);
-          if (sp === "LIVE") b.tint(nx, ly, nx + measureM("LIVE"), ly + 5, (t, x) => b.lifeColor(t, x));
-          ly += 8;
-        }
+        const ny = t.y + 6, nx = colL + measureM(no) + 6;
+        b.stamp(no, colL, ny + 1, 1, undefined, true);
+        b.stamp(e.title.toUpperCase(), nx, ny, 1, entryLink(e.slug));
+        // the small text runs from the margin on a phone: the width is too dear to indent
+        let ly = ny + 10;
+        for (const line of wrapM((e.lines[0] || e.blurb).toUpperCase(), rr - colL).slice(0, 2)) { b.stamp(line, colL, ly, 1, undefined, true); ly += 7; }
+        ly += 2;
+        b.stamp(e.state, colL, ly, 1, undefined, true);
+        if (e.state === "LIVE") b.tint(colL, ly, colL + measureM(e.state), ly + 5, (t, x) => b.lifeColor(t, x));
+        b.stamp("SINCE " + e.since, colL, ly + 7, 1, undefined, true);
       }
       const nameRec = b.links[b.links.length - 1];
-      // the whole box is the link; hovering it lights the name
-      const hot = b.hotAt(t.x * b.cw, t.y * b.chh, t.w * b.cw, t.h * b.chh, e.title.toLowerCase(), () => b.route(`/work/${e.slug}`), `/work/${e.slug}`);
-      hot.addEventListener("mouseenter", () => { if (nameRec) { nameRec.hover = true; nameRec.since = performance.now() / 1000; } });
-      hot.addEventListener("mouseleave", () => { if (nameRec) nameRec.hover = false; });
+      const row = ledgerRows[i];
+      // the whole row is the link; hovering it lights the name and turns the line over
+      const hot = b.hotAt(colL * b.cw, t.y * b.chh, (rr - colL) * b.cw, t.h * b.chh, e.title.toLowerCase(), () => b.route(`/work/${e.slug}`), `/work/${e.slug}`);
+      hot.addEventListener("mouseenter", () => { const now = performance.now() / 1000; if (nameRec) { nameRec.hover = true; nameRec.since = now; } if (row) row.hover = now; });
+      hot.addEventListener("mouseleave", () => { if (nameRec) nameRec.hover = false; if (row) row.hover = 0; });
     });
+    if (entries.length) rule(G.tiles[entries.length - 1].y + G.tiles[0].h);
     y = G.end;
 
     // ABOUT: plain lines, then the interests with the strike as the bullet
@@ -707,6 +707,32 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
     b.haloOf(L);
   }
 
+  /* ---------- the ledger's lines turn over on hover, like a split-flap posting the next destination ---------- */
+  type LedgerRow = { x: number; y: number; w: number; lines: string[]; hover: number };
+  let ledgerRows: LedgerRow[] = [];
+  let flipL: Layer | null = null;
+  function updateFlip(b: Board, t: number) {
+    const L = (flipL ??= b.layer());
+    const { cols, rows } = b;
+    const on = current === "HOME" && b.wide && !b.life && ledgerRows.length;
+    if (!on) { if (L.key !== "off") { L.key = "off"; L.mask.fill(0); L.halo = null; } return; }
+    // which line each hovered row shows: the second on hover, the third after a moment
+    const ks = ledgerRows.map((r) => (r.hover ? Math.min(r.lines.length - 1, t - r.hover > 1.6 ? 2 : 1) : 0));
+    const key = ks.join("") + "|" + b.winRow;
+    if (key === L.key) return;
+    L.key = key;
+    L.mask.fill(0);
+    const halo = (L.halo ??= new Uint8Array(cols * rows)); halo.fill(0);
+    ledgerRows.forEach((r, i) => {
+      if (!ks[i]) return;
+      const y = r.y - b.winRow;
+      if (y < 0 || y + 5 > rows) return;
+      // the row's line area goes dark, then the next line is posted into it
+      for (let yy = y; yy < y + 5; yy++) for (let x = r.x; x < r.x + r.w && x < cols; x++) halo[yy * cols + x] = 1;
+      b.stampInto(L.mask, fit(r.lines[ks[i]], true, r.w), r.x, y, 1, true);
+    });
+  }
+
   /* ---------- the ticker: a line crawling along the pinned band, a column at a time ---------- */
   let ticker: Layer | null = null;
   function updateTicker(b: Board, t: number) {
@@ -849,6 +875,7 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
     updateMark(b);
     updateGlider(b, t);
     updateTicker(b, t);
+    updateFlip(b, t);
     updateFlag(b, t);
     updateLife(b);
   }
