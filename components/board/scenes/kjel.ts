@@ -534,6 +534,7 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
         let spec = specs.join("   "), sw = measureM(spec);
         while (sw > right - nx - 40 && specs.length > 2) { specs.pop(); spec = specs.join("   "); sw = measureM(spec); }
         b.stamp(spec, right - sw, by, 1, undefined, true);
+        if (specs[0] === "LIVE") b.tint(right - sw, by, right - sw + measureM("LIVE"), by + 5, (t, x) => b.lifeColor(t, x));
       } else {
         b.stamp(no, t.x + 4, t.y + 5, 2);
         const nx = t.x + 4;
@@ -541,7 +542,11 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
         b.stamp(e.title.toUpperCase(), nx, ly, 1, entryLink(e.slug)); ly += 7 + 4;
         for (const line of wrapM((e.lines[0] || e.blurb).toUpperCase(), t.w - 8).slice(0, 2)) { b.stamp(line, nx, ly, 1, undefined, true); ly += 8; }
         ly += 3;
-        for (const sp of specs.slice(0, 2)) { b.stamp(sp, nx, ly, 1, undefined, true); ly += 8; } // state and since; the rest is on the entry
+        for (const sp of specs.slice(0, 2)) { // state and since; the rest is on the entry
+          b.stamp(sp, nx, ly, 1, undefined, true);
+          if (sp === "LIVE") b.tint(nx, ly, nx + measureM("LIVE"), ly + 5, (t, x) => b.lifeColor(t, x));
+          ly += 8;
+        }
       }
       const nameRec = b.links[b.links.length - 1];
       // the whole box is the link; hovering it lights the name
@@ -636,7 +641,12 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
     // the name
     for (const line of L.title) { b.stamp(line, colL, y, sc, undefined, L.titleMicro, true); y += L.titleH; }
     // the meta line, wrapped when the board is narrow
-    y = L.yMeta; for (const m of L.meta) { b.stamp(m, colL, y, 1, undefined, true); y += 8; }
+    y = L.yMeta;
+    for (const m of L.meta) {
+      b.stamp(m, colL, y, 1, undefined, true);
+      if (m.startsWith("LIVE")) b.tint(colL, y, colL + measureM("LIVE"), y + 5, (t, x) => b.lifeColor(t, x));
+      y += 8;
+    }
     // the one-liner
     y = L.yBlurb; for (const line of L.blurb) { b.stamp(line, colL, y, 1); y += 9; }
     // the short lines, in the small face
@@ -703,7 +713,9 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
     const L = (ticker ??= b.layer());
     L.cold = true; // moving text: no afterglow trail
     const { cols, rows, wide, reduced } = b;
-    const on = current === "HOME" && !b.life && TICKER;
+    // it steps aside while a menu preview is using the line
+    const previewOn = !!preview && preview.key !== "off" && preview.key !== "none";
+    const on = current === "HOME" && !b.life && TICKER && !previewOn;
     if (!on) { if (L.key !== "off") { L.key = "off"; L.mask.fill(0); } return; }
     // the span: right of the small mark when it is pinned (or from the gutter when it is not),
     // up to the clock when the landing is scrolled, else up to the menu; on phones, to the edge

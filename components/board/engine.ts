@@ -54,6 +54,8 @@ export type BoardOptions = {
   hotsMode?: "absolute";
 };
 
+/** the one colour on the board, still: for LIVE and for links under the hand */
+const LIVE = "rgb(96,255,140)";
 const HELV = '"Helvetica Neue", Helvetica, Arial, sans-serif';
 const TRANS = 0.75;
 
@@ -875,7 +877,7 @@ export class Board {
       const uy = (l.pinned ? l.row : l.row - off) + l.gh * l.scale + 1;
       if (uy < 0 || uy >= rows) continue;
       const n = Math.round(l.wCols * l.hoverP);
-      ctx.fillStyle = ON;
+      ctx.fillStyle = LIVE; // reaching for a link is the one time the board answers in colour
       for (let c = 0; c < n; c++) {
         const xx = l.col + c;
         if (xx >= cols) break;
