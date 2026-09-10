@@ -834,17 +834,12 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
   let lifeN: Layer | null = null; // the note or the generation count: rebuilt as it changes
   let lifeHots: HTMLAnchorElement[] = [];
   let lifeCKey = "off", lifeNKey = "off";
-  // the first time someone opens Life the board is not empty: a glider and a blinker are already there,
-  // and the note walks them through it until they draw something of their own
-  let lifeGuide = false;
+  // the first time someone opens Life the board is not empty: a glider and a blinker are waiting,
+  // and the card opens itself to say what they are. After that it never explains again.
   const GLIDER_P = [".#.", "..#", "###"], BLINKER_P = ["###"];
   const guideSeen = () => { try { return localStorage.getItem("life-seen") === "1"; } catch { return true; } };
-  const guideDone = () => { lifeGuide = false; try { localStorage.setItem("life-seen", "1"); } catch {} };
-  function guideText(life: NonNullable<Board["life"]>) {
-    if (!life.running && life.gen === 0) return "TWO SHAPES ARE ALREADY ON THE BOARD: A GLIDER AND A BLINKER. PRESS PLAY TO SEE WHAT THEY DO.";
-    if (life.gen < 24) return "EVERY CELL LOOKS AT ITS EIGHT NEIGHBOURS. TWO OR THREE ALIVE AND IT LIVES ON. EXACTLY THREE AROUND AN EMPTY ONE AND A CELL IS BORN.";
-    return "THE GLIDER WALKS. THE BLINKER BLINKS. PAUSE, THEN CLICK ANY CELL TO FLIP IT, OR DRAG TO PAINT. CLEAR STARTS OVER.";
-  }
+  const guideDone = () => { try { localStorage.setItem("life-seen", "1"); } catch {} };
+
   function updateLife(b: Board) {
     const C = (lifeC ??= b.layer()), N = (lifeN ??= b.layer());
     const life = b.life;
@@ -862,12 +857,13 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
     }
     const { wide } = b, { x: colL, y } = lifeWordAt;
     const ck = life!.running ? "run" : "edit";
-    if (lifeCKey === "off") {
-      // just opened: the first visit gets the guided board
-      lifeGuide = !guideSeen();
-      if (lifeGuide) { b.lifeSeed(GLIDER_P, 0.28, 0.3); b.lifeSeed(BLINKER_P, 0.6, 0.5); }
+    if (lifeCKey === "off" && !guideSeen()) {
+      // a first visit: two shapes to press play on, and the card to say what they are
+      b.lifeSeed(GLIDER_P, 0.28, 0.3);
+      b.lifeSeed(BLINKER_P, 0.6, 0.5);
+      guideDone();
+      b.card("life");
     }
-    if (lifeGuide && (life!.touched || life!.gen > 90)) guideDone();
     if (ck !== lifeCKey) {
       lifeCKey = ck;
       C.mask.fill(0);
@@ -893,14 +889,12 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
       lifeHots = Array.from(b.hots.children).slice(n0) as HTMLAnchorElement[];
       b.haloOf(C);
     }
-    const guide = lifeGuide ? guideText(life!) : "";
-    const nk = (life!.running ? "GEN " + life!.gen : "edit") + "|" + guide;
+    const nk = life!.running ? "GEN " + life!.gen : "edit";
     if (nk !== lifeNKey) {
       lifeNKey = nk;
       N.mask.fill(0);
-      // the generation count while it runs; the guide's note on a first visit. WHAT IS THIS covers the rest
-      const { cols } = b;
-      const lines = [...(guide ? wrapM(guide, Math.round(cols * (wide ? 0.5 : 0.9)) - colL) : []), ...(life!.running ? ["GEN " + life!.gen] : [])];
+      // the generation count while it runs; WHAT IS THIS covers everything else
+      const lines = life!.running ? [nk] : [];
       let ny = wide ? y - 2 - lines.length * 7 : y + 27; // above the word when wide, under the buttons when narrow
       for (const line of lines) { b.stampInto(N.mask, line, colL, ny, 1, true); ny += 7; }
       b.haloOf(N);
@@ -947,6 +941,8 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
 
   return {
     compose, tick, load, destroy, external,
+    // words the board never mentions. the film only exists if someone put one at that path
+    codes: { badapple: (b: Board) => b.playFilm("/film/bad-apple.bin") } as Record<string, (b: Board) => void>,
     actions: { LIFE: (b: Board) => b.toggleLife(), "LIFE:PLAY": (b: Board) => b.lifePlay(), "LIFE:CLEAR": (b: Board) => b.lifeClear(), "LIFE:INFO": (b: Board) => b.card("life") } as Record<string, (b: Board) => void>,
     rows: (W: number, H: number) => (W / H > 1.05 ? 141 : 153),
     /** total rows of the tall landing: home, the ledger, then what about needs */

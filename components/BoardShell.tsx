@@ -103,6 +103,7 @@ export function BoardShell({ text, live, children }: { text?: BoardText; live?: 
       tick: scene.tick,
       external: scene.external,
       actions: scene.actions,
+      codes: scene.codes,
       onCard: setCard,
       routes,
       onRoute: (path) => {

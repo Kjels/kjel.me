@@ -6,6 +6,7 @@
 
 import { glyph, glyphM, measureCols, measureM } from "./font";
 import { ON, OFF, BG, HEAT, HEAT_FREE, accentRGB, accentCSS } from "./palette";
+import { loadFilm, type Film } from "./film";
 import { hash2, easeInOut, rasterToCells } from "./raster";
 import { PW, PH } from "./portrait";
 
@@ -34,6 +35,8 @@ export type BoardOptions = {
   routes?: Record<string, string>;
   /** link names that do something on the board itself, e.g. LIFE → run the automaton */
   actions?: Record<string, (b: Board) => void>;
+  /** words that, typed on the board, do something the board never advertises */
+  codes?: Record<string, (b: Board) => void>;
   /** called when a routed link is clicked; the shell wipes the board and navigates */
   onRoute?: (path: string) => void;
   /** open an HTML card over the board by id, or null to close it. The shell renders it */
@@ -114,6 +117,11 @@ export class Board {
 
   cursorMode = 1; // C cycles: 0 none · 1 trail · 2 guides
   /** Conway's Life over the screen grid, seeded from whatever the dots show. null when off */
+  /** a film playing over the whole board: nothing else is lit while it runs */
+  film: { f: Film; at: number; scale: number; ox: number; oy: number } | null = null;
+  filmLoading = false;
+  /** the last letters typed, so a word can open something the board never mentions */
+  private typed = "";
   /** cells live on a coarser lattice than the dots: k dots per cell, gw×gh cells, so a cell is a real click target */
   life: { cells: Uint8Array; next: Uint8Array; at: number; gen: number; running: boolean; k: number; gw: number; gh: number; /** the visitor has drawn something themselves */ touched: boolean } | null = null;
   /** performance.now()/1000 of the last pointer or key input */
@@ -139,7 +147,15 @@ export class Board {
     };
     const touch = () => { this.lastInput = performance.now() / 1000; };
     this.lastInput = performance.now() / 1000;
-    on("keydown", (e) => { touch(); if (e.key === "c" || e.key === "C") this.cursorMode = (this.cursorMode + 1) % 3; if (e.key === "Escape" && !this.cardOpen) this.stopLife(); });
+    on("keydown", (e) => { touch(); if (e.key === "c" || e.key === "C") this.cursorMode = (this.cursorMode + 1) % 3; if (e.key === "Escape" && !this.cardOpen) { if (this.film) this.stopFilm(); else this.stopLife(); }
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA")) return;
+      if (/^[a-z]$/i.test(e.key)) {
+        this.typed = (this.typed + e.key.toLowerCase()).slice(-16);
+        for (const word of Object.keys(this.opts.codes || {})) if (this.typed.endsWith(word)) { this.typed = ""; this.opts.codes![word](this); break; }
+      }
+    });
+    on("pointerdown", () => { if (this.film) this.stopFilm(); });
     // the Life editor: press a dot to flip it, drag to paint
     on("pointerdown", (e) => {
       if (!this.life || e.button !== 0 || this.onHot(e.target)) return;
@@ -177,6 +193,44 @@ export class Board {
   /** the one colour on the board (see palette.ts), with a shimmer running along x */
   lifeColor(t: number, x: number) {
     return `rgba(${accentRGB()},${(0.6 + 0.4 * Math.sin(t * 2.4 - x * 0.22)).toFixed(3)})`;
+  }
+
+  /* ---------- a film: the board as a 1-bit screen ---------- */
+
+  /** fetch a film and play it over the whole board. Esc, a click or the end stops it */
+  async playFilm(url: string, loop = false) {
+    if (this.film || this.filmLoading) return;
+    this.filmLoading = true;
+    const f = await loadFilm(url);
+    this.filmLoading = false;
+    if (!f) return;
+    this.stopLife();
+    this.filmLoop = loop;
+    this.film = { f, at: 0, scale: 1, ox: 0, oy: 0 };
+    this.fitFilm();
+    this.lifeOverflow = document.documentElement.style.overflow;
+    document.documentElement.style.overflow = "hidden";
+    this.hots.dataset.life = "1";
+    this.lastInput = performance.now() / 1000;
+  }
+
+  stopFilm() {
+    if (!this.film) return;
+    this.film = null;
+    document.documentElement.style.overflow = this.lifeOverflow;
+    delete this.hots.dataset.life;
+  }
+
+  private filmLoop = false;
+
+  /** letterbox the film into the board, whole dots per cell where it can */
+  private fitFilm() {
+    const F = this.film;
+    if (!F) return;
+    const s = Math.min(this.cols / F.f.w, this.rows / F.f.h);
+    F.scale = s;
+    F.ox = Math.round((this.cols - F.f.w * s) / 2);
+    F.oy = Math.round((this.rows - F.f.h * s) / 2);
   }
 
   /* ---------- life: a blank board you seed by hand, then run ---------- */
@@ -641,6 +695,7 @@ export class Board {
     this.trailV = new Float32Array(n);
     this.prevLum = null; this.prevMask = null; this.transStart = -1;
     for (const l of this.layers) { l.mask = new Uint8Array(n); l.halo = null; l.key = ""; }
+    this.fitFilm();
     this.buildOffLayer();
     this.opts.onFit?.(this);
   }
@@ -761,6 +816,14 @@ export class Board {
       for (let i = from; i < to; i++) if (layered[i]) { dotV[i] = layered[i] === 2 ? 1 : 0; heat[i] = 0; }
       this.prevWinRow = off;
     }
+    // the film owns the board while it plays: one step per frame period, then it stops
+    const film = this.film;
+    if (film) {
+      if (!film.at) film.at = t;
+      const want = Math.floor((t - film.at) * film.f.fps);
+      let guard = 0;
+      while (film.f.index < want && guard++ < 4) if (!film.f.step(this.filmLoop)) { this.stopFilm(); break; }
+    }
     // life: step the automaton at 8 Hz while it runs; the dot under the cursor is the cursor
     if (life && life.running && !inTrans && t - life.at > 0.125) { this.stepLife(); life.at = t; }
     const lifeCur = life && mx > -9999 && !this.onHot(document.elementFromPoint(mx, my)) ? this.cellAt(mx, my) : -1;
@@ -775,7 +838,7 @@ export class Board {
       // dynamic layers (the pinned line, the clock, the cyclist) sit in front of everything;
       // their halo is a dark ring that cuts whatever scrolls beneath them
       let lit = false, haloed = false, cold = false;
-      if (!useOld) for (let k = 0; k < nL; k++) { if (layers[k].mask[i]) { lit = true; cold = !!layers[k].cold; break; } const h = layers[k].halo; if (h && h[i]) haloed = true; }
+      if (!useOld && !film) for (let k = 0; k < nL; k++) { if (layers[k].mask[i]) { lit = true; cold = !!layers[k].cold; break; } const h = layers[k].halo; if (h && h[i]) haloed = true; }
       if (lit) target = 1;
       else if (haloed) target = 0;
       else if (m >= 2) target = 1;
@@ -806,7 +869,11 @@ export class Board {
         const span = rp.x1 - rp.x0 + 4, head = rp.p * span, u = x - rp.x0 + hash2(x, ry) * 2;
         if (u < head && u > head - span * 0.3) target = 1 - target;
       }
-      if (life && !lit && !haloed) { const ci = ((y / life.k) | 0) * life.gw + ((x / life.k) | 0); target = life.cells[ci] || (ci === lifeCur ? 1 : 0); }
+      if (film) {
+        const fx = Math.floor((x - film.ox) / film.scale), fy = Math.floor((y - film.oy) / film.scale);
+        target = fx >= 0 && fx < film.f.w && fy >= 0 && fy < film.f.h ? film.f.cells[fy * film.f.w + fx] : 0;
+      }
+      else if (life && !lit && !haloed) { const ci = ((y / life.k) | 0) * life.gw + ((x / life.k) | 0); target = life.cells[ci] || (ci === lifeCur ? 1 : 0); }
       const pv = dotV[i];
       const wasCold = coldPrev[i]; coldPrev[i] = lit && cold ? 1 : 0;
       dotV[i] += (target - dotV[i]) * (reduced || wasCold ? 1 : 0.38);
@@ -846,7 +913,7 @@ export class Board {
       ctx.ellipse(x * cw + cw / 2, y * chh + chh / 2, cw * 0.42, chh * 0.42, 0, 0, Math.PI * 2);
       ctx.fill();
     };
-    for (const tb of this.tints) {
+    for (const tb of (film ? [] : this.tints)) {
       for (let vy = Math.max(tb.y0, off); vy < Math.min(tb.y1, off + rows); vy++) for (let x = Math.max(0, tb.x0); x < Math.min(cols, tb.x1); x++) {
         const y = vy - off, i = y * cols + x;
         if (dotV[i] > 0.5 && (!life || !life.cells[((y / life.k) | 0) * life.gw + ((x / life.k) | 0)])) dot(x, y, tb.color(t, x, vy));

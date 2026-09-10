@@ -46,6 +46,7 @@ Ordered by value. Checked items are done.
 - [x] **GAME OF LIFE.** The one coloured thing on the board: a green word with a glider lapping a 7×7 torus beside it. Opens a blank board: click or drag dots to seed, PLAY runs, PAUSE edits, CLEAR wipes, WHAT IS THIS opens a glass card (HTML over the board, the first of the kind), the word or Esc leaves
 - [x] Cursor trail on by default (`C` still cycles none, trail, guides)
 - [x] Screen-space layers (clock, pins) leave no afterglow when the landing scrolls
+- [x] **A film player.** The board as a 1-bit screen: XOR + run-length frames, an encoder that takes any video, and a word you can type to play one
 - [ ] Drag to flip dots on the landing, healing after a moment
 - [ ] Optional relay click per flip, off by default
 - [x] Landing carries its copy as visually-hidden HTML

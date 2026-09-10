@@ -57,6 +57,20 @@ With no env vars the board renders from `BOARD_DEFAULTS` and the ledger reads pu
 
 Keys: `C` cycles cursor modes, `Esc` leaves Life. `prefers-reduced-motion` swaps the wipe for a cut.
 
+## Films
+
+The board can play a 1-bit film over every dot: `scripts/encode-film.mjs` turns a video into
+frames of on/off cells, each stored as the run-length encoded XOR against the frame before it,
+so a silhouette animation costs very little.
+
+```
+node scripts/encode-film.mjs input.mp4 public/film/<name>.bin --w 160 --h 120 --fps 20
+node scripts/encode-film.mjs --synth public/film/test.bin      # a stand-in, to check the pipeline
+```
+
+Register the file under a word in the scene's `codes` map and typing that word on the board plays
+it. Esc, a click, or the last frame ends it. Nothing is shown if the file is not there.
+
 ## Adding a project
 
 Add an entry to `content/work/index.ts` with the repo as `owner/name`. Give the repo a `ROADMAP.md` with a `**Status: ...**` line and a `- [ ]` checklist; the ledger does the rest.

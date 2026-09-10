@@ -24,9 +24,9 @@ export const CARDS: Record<string, Card> = {
     ],
     after: (
       <p>
-        Here the board is the grid and its edges wrap around. Click a cell to flip it, drag to paint several, then
-        Play. Pause to edit, Clear to start over. The green shape beside the word on the home screen is a glider, a
-        five-cell pattern that moves one cell diagonally every four steps.
+        Here the board is the grid and its edges wrap around. Two shapes are waiting on it: a glider, which walks one
+        cell diagonally every four steps, and a blinker, which flips between two states forever. Close this and press
+        Play to watch them. Then Pause, and click any cell to flip it or drag to paint your own.
       </p>
     ),
   },
