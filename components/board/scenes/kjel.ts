@@ -450,6 +450,30 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
     }
   }
 
+  // a small apple, 7 wide by 8 tall. the only red thing on the board, and it is not mentioned anywhere
+  const APPLE = [
+    "...#...",
+    "..#.##.",
+    ".#####.",
+    "#######",
+    "#######",
+    "#######",
+    ".#####.",
+    "..#.#..",
+  ];
+  const APPLE_RED = "rgb(214,42,38)";
+  /** stamp the apple at a spot on the board and let a click on it play the film */
+  function stampApple(b: Board, x0: number, y0: number) {
+    const { cols, rows } = b;
+    for (let r = 0; r < APPLE.length; r++) for (let c = 0; c < APPLE[r].length; c++) {
+      if (APPLE[r][c] !== "#") continue;
+      const x = x0 + c, y = y0 + r;
+      if (x >= 0 && x < cols && y >= 0 && y < rows) b.block(x, y, 1, 1);
+    }
+    b.tint(x0, y0, x0 + 7, y0 + 8, () => APPLE_RED);
+    b.hotAt((x0 - 2) * b.cw, (y0 - 2) * b.chh, 11 * b.cw, 12 * b.chh, "apple", () => b.playFilm("/film/bad-apple.bin"));
+  }
+
   /* ---------- compositions ---------- */
 
   function composeHome(b: Board) {
@@ -497,6 +521,7 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
       }
       // GAME OF LIFE: the one coloured thing on the board. opens a blank board to seed and run.
       // a glider laps a 7x7 torus beside it. it shares the clock's baseline
+      stampApple(b, cols - 9, Math.round(rows * 0.62));
       const lw = b.stamp("GAME OF LIFE", colL, rows - 26, 1, "LIFE");
       b.tint(colL, rows - 26, colL + lw, rows - 19, (t, x) => b.lifeColor(t, x));
       lifeWordAt = { x: colL, y: rows - 26 };
@@ -515,6 +540,7 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
         }
         irow += 4;
       }
+      stampApple(b, cols - 9, Math.min(irow + 10, rows - 74));
       // GAME OF LIFE in the small face, the glider beside it, above the role and the clock
       const ly = Math.min(irow + 4, rows - 62);
       const lw = b.stamp("GAME OF LIFE", colL, ly, 1, "LIFE", true);
