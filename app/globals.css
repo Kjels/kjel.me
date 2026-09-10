@@ -70,10 +70,12 @@ html.fd-snap { scroll-snap-type: y mandatory; }
 /* the sign's face for the title and close, plain type for the sentences, dots for diagrams. sweeps in like a page wipe.
    frosted-glass approximation; solid under reduced transparency */
 :root { --dot: 6px; --cell: 9px; --live: rgb(96, 255, 140); }
-.glass-back { position: fixed; inset: 0; z-index: 5; }
+/* the board behind it blurs and dims, so the pane sits on a calm field */
+.glass-back { position: fixed; inset: 0; z-index: 5; background: rgba(10, 10, 10, 0.42); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); animation: glass-dim 0.3s ease-out both; }
+@keyframes glass-dim { from { opacity: 0; } to { opacity: 1; } }
 .glass {
   position: fixed; z-index: 6;
-  left: 6vw; bottom: 26vh; width: min(42rem, 90vw); max-height: calc(100dvh - 28vh - 72px); overflow: auto;
+  inset: 0; margin: auto; height: fit-content; width: min(42rem, 90vw); max-height: 86dvh; overflow: auto;
   padding: 26px 32px 28px; border-radius: 0;
   color: var(--fg);
   background:
@@ -86,7 +88,7 @@ html.fd-snap { scroll-snap-type: y mandatory; }
   outline: none;
 }
 .glass:focus-visible { outline: none; }
-@media (max-width: 720px) { .glass { left: 5vw; right: 5vw; width: auto; bottom: 10vh; padding: 24px 22px 26px; } }
+@media (max-width: 720px) { .glass { width: 90vw; padding: 24px 22px 26px; } }
 /* the wipe: revealed column by column, left to right, like the board turning a page */
 @keyframes glass-wipe { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
 .glass-close { position: absolute; top: 24px; right: 30px; background: none; border: 0; padding: 12px; margin: -12px; line-height: 0; cursor: pointer; opacity: 0.8; }
@@ -105,8 +107,8 @@ html.fd-snap { scroll-snap-type: y mandatory; }
 .dot.me { box-shadow: 0 0 0 1.5px var(--fg); }
 .out { display: inline-flex; align-items: center; gap: 10px; white-space: nowrap; color: var(--fg2); }
 .out .dot { flex: none; }
-@media (prefers-reduced-transparency: reduce) { .glass { background: var(--raised); -webkit-backdrop-filter: none; backdrop-filter: none; } }
-@media (prefers-reduced-motion: reduce) { .glass { animation: none; } }
+@media (prefers-reduced-transparency: reduce) { .glass { background: var(--raised); -webkit-backdrop-filter: none; backdrop-filter: none; } .glass-back { background: rgba(10, 10, 10, 0.7); -webkit-backdrop-filter: none; backdrop-filter: none; } }
+@media (prefers-reduced-motion: reduce) { .glass, .glass-back { animation: none; } }
 
 /* ---- content layer ---- */
 /* Helvetica only. Labels are tracked caps, 10-11px, 700. Hairlines, no boxes. */
