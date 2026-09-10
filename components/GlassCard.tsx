@@ -2,12 +2,16 @@
 
 import { useEffect, useRef } from "react";
 import { CARDS } from "@/content/cards";
+import { DotText } from "./DotText";
 
-// A glass card over the board: the HTML answer to a question the dots can only ask.
-// A pane of frosted glass laid on the sign, sharp-cornered like the grid: a title, an explanation, a rule table.
-// Esc, Close or a click outside closes it. Web glassmorphism, not a platform material.
+// A pane of frosted glass laid on the sign: the board's face for the title and the close,
+// plain type for the sentences, dots for the diagrams. It sweeps in left to right like a page
+// wipe. Esc, Close or a click outside closes it. Web glassmorphism, not a platform material.
+const GREEN = "rgb(96,255,140)";
+const GREY = "#9a999f";
+
 export function GlassCard({ id, onClose }: { id: string | null; onClose: () => void }) {
-  const ref = useRef<HTMLDivElement>(null);
+  const ref = useRef<HTMLElement>(null);
   const card = id ? CARDS[id] : null;
 
   useEffect(() => {
@@ -23,21 +27,21 @@ export function GlassCard({ id, onClose }: { id: string | null; onClose: () => v
     <>
       <div className="glass-back" data-glass onPointerDown={onClose} aria-hidden />
       <section ref={ref} className="glass" data-glass role="dialog" aria-labelledby="glass-title" tabIndex={-1}>
-        <button type="button" className="glass-close" onClick={onClose}>Close</button>
-        <h2 id="glass-title" className="glass-title">{card.title}</h2>
+        <button type="button" className="glass-close" onClick={onClose}><DotText text="CLOSE" micro color={GREY} scale={0.55} /></button>
+        <h2 id="glass-title" className="glass-title"><DotText text={card.title} color={GREEN} /></h2>
         <div className="glass-body">{card.intro}</div>
         {card.rules && (
-          <table className="glass-rules">
-            <tbody>
-              {card.rules.map(([state, cond, out], i) => (
-                <tr key={i}>
-                  <th scope="row">{state}</th>
-                  <td>{cond}</td>
-                  <td className="glass-out">{out}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <ul className="glass-rules">
+            {card.rules.map((r, i) => (
+              <li key={i}>
+                <span className="cells" aria-hidden>
+                  {r.before.map((v, k) => <span key={k} className={"dot" + (v ? " on" : "") + (k === 4 ? " me" : "")} />)}
+                </span>
+                <span className="rule">{r.text}</span>
+                <span className="out"><span className={"dot" + (r.after ? " on" : "")} aria-hidden />{r.outcome}</span>
+              </li>
+            ))}
+          </ul>
         )}
         {card.after && <div className="glass-body">{card.after}</div>}
       </section>

@@ -1,30 +1,26 @@
 import type { ReactNode } from "react";
 
-// The glass cards: what the board says when a dot line is not enough.
-// Plain sentences, mixed case, real type. One card per id.
-export type Card = {
-  title: string;
-  intro: ReactNode;
-  /** rows of a rule table: [state, condition, outcome] */
-  rules?: [string, string, string][];
-  after?: ReactNode;
-};
+// The glass cards: what the board says when a dot line is not enough. The title is set in the
+// sign's face; the body is plain sentences. A rule shows the cell and its eight neighbours as
+// dots, live ones green as on the board, the cell under judgement ringed, then what becomes of it.
+export type Rule = { before: number[]; after: 0 | 1; text: string; outcome: string };
+export type Card = { title: string; intro: ReactNode; rules?: Rule[]; after?: ReactNode };
 
 export const CARDS: Record<string, Card> = {
   life: {
-    title: "Conway's Game of Life",
+    title: "GAME OF LIFE",
     intro: (
       <p>
         A cellular automaton devised by John Conway in 1970. Every cell on the grid is either alive or dead. The grid
-        advances in steps, and at each step every cell is updated at once, according to how many of its eight
-        neighbouring cells are alive.
+        advances in steps, and at each step every cell is updated at once according to how many of its eight
+        neighbours are alive.
       </p>
     ),
     rules: [
-      ["Live cell", "fewer than 2 live neighbours", "dies"],
-      ["Live cell", "2 or 3 live neighbours", "survives"],
-      ["Live cell", "more than 3 live neighbours", "dies"],
-      ["Dead cell", "exactly 3 live neighbours", "becomes alive"],
+      { before: [0, 1, 0, 0, 1, 0, 0, 0, 0], after: 0, text: "A live cell with fewer than two live neighbours", outcome: "dies" },
+      { before: [0, 1, 0, 0, 1, 1, 0, 0, 0], after: 1, text: "A live cell with two or three live neighbours", outcome: "survives" },
+      { before: [1, 1, 0, 1, 1, 1, 0, 0, 0], after: 0, text: "A live cell with more than three live neighbours", outcome: "dies" },
+      { before: [1, 0, 1, 0, 0, 0, 0, 1, 0], after: 1, text: "A dead cell with exactly three live neighbours", outcome: "becomes alive" },
     ],
     after: (
       <p>

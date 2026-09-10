@@ -67,12 +67,14 @@ html.fd-snap { scroll-snap-type: y mandatory; }
 }
 
 /* ---- glass cards: a pane laid on the board, for what the dots cannot say ---- */
-/* sharp like the grid, a hairline edge lit from above, no eyebrow, no footnote. frosted-glass approximation, solid under reduced transparency */
+/* the sign's face for the title and close, plain type for the sentences, dots for diagrams. sweeps in like a page wipe.
+   frosted-glass approximation; solid under reduced transparency */
+:root { --dot: 6px; --cell: 9px; --live: rgb(96, 255, 140); }
 .glass-back { position: fixed; inset: 0; z-index: 5; }
 .glass {
   position: fixed; z-index: 6;
-  left: 6vw; bottom: 27vh; width: min(38rem, 90vw); max-height: calc(100dvh - 29vh - 24px); overflow: auto;
-  padding: 30px 34px 32px; border-radius: 0;
+  left: 6vw; bottom: 26vh; width: min(42rem, 90vw); max-height: calc(100dvh - 28vh - 72px); overflow: auto;
+  padding: 26px 32px 28px; border-radius: 0;
   color: var(--fg);
   background:
     linear-gradient(180deg, rgba(244, 244, 242, 0.035), rgba(244, 244, 242, 0) 40%),
@@ -80,24 +82,29 @@ html.fd-snap { scroll-snap-type: y mandatory; }
   -webkit-backdrop-filter: blur(22px) saturate(1.25); backdrop-filter: blur(22px) saturate(1.25);
   border: 1px solid var(--rule);
   box-shadow: inset 0 1px 0 rgba(244, 244, 242, 0.1), 0 30px 70px rgba(10, 10, 10, 0.5);
-  animation: glass-in 0.26s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  animation: glass-wipe 0.42s cubic-bezier(0.4, 0, 0.2, 1) both;
   outline: none;
 }
 .glass:focus-visible { outline: none; }
 @media (max-width: 720px) { .glass { left: 5vw; right: 5vw; width: auto; bottom: 10vh; padding: 24px 22px 26px; } }
-@keyframes glass-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
-.glass-close { position: absolute; top: 18px; right: 18px; background: none; border: 0; padding: 10px 12px; font: inherit; font-size: 14px; color: var(--fg2); cursor: pointer; }
-.glass-close:hover { color: var(--fg); }
-.glass-title { margin: 0 0 16px; padding-right: 72px; font-size: 24px; font-weight: 500; line-height: 1.2; letter-spacing: -0.012em; }
-.glass-body p { margin: 0 0 14px; font-size: 16.5px; line-height: 1.55; color: var(--fg); max-width: 60ch; }
+/* the wipe: revealed column by column, left to right, like the board turning a page */
+@keyframes glass-wipe { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
+.glass-close { position: absolute; top: 24px; right: 30px; background: none; border: 0; padding: 12px; margin: -12px; line-height: 0; cursor: pointer; opacity: 0.8; }
+.glass-close:hover { opacity: 1; }
+.glass-close canvas, .glass-title canvas { display: block; }
+.glass-title { margin: 4px 0 18px; padding-right: 100px; line-height: 0; }
+.glass-body p { margin: 0 0 12px; font-size: 16px; line-height: 1.5; color: var(--fg); max-width: 64ch; }
 .glass-body p:last-child { margin-bottom: 0; }
-.glass-rules { width: 100%; border-collapse: collapse; margin: 18px 0 20px; font-size: 16px; line-height: 1.4; }
-.glass-rules tr { border-top: 1px solid var(--rule); }
-.glass-rules tr:last-child { border-bottom: 1px solid var(--rule); }
-.glass-rules th, .glass-rules td { padding: 11px 0; text-align: left; vertical-align: baseline; font-weight: 400; }
-.glass-rules th { color: var(--fg2); width: 6.5em; padding-right: 16px; white-space: nowrap; }
-.glass-rules td { color: var(--fg); padding-right: 16px; }
-.glass-rules .glass-out { width: 8.5em; padding-right: 0; text-align: right; white-space: nowrap; }
+/* rules: the neighbourhood as dots, the sentence, the outcome as one dot and a word */
+.glass-rules { list-style: none; margin: 16px 0 18px; padding: 0; font-size: 16px; line-height: 1.4; }
+.glass-rules li { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 0 18px; padding: 10px 0; border-top: 1px solid var(--rule); }
+.glass-rules li:last-child { border-bottom: 1px solid var(--rule); }
+.cells { display: grid; grid-template-columns: repeat(3, var(--cell)); gap: 3px; }
+.dot { display: inline-block; width: var(--cell); height: var(--cell); border-radius: 50%; background: rgba(244, 244, 242, 0.16); }
+.dot.on { background: var(--live); }
+.dot.me { box-shadow: 0 0 0 1.5px var(--fg); }
+.out { display: inline-flex; align-items: center; gap: 10px; white-space: nowrap; color: var(--fg2); }
+.out .dot { flex: none; }
 @media (prefers-reduced-transparency: reduce) { .glass { background: var(--raised); -webkit-backdrop-filter: none; backdrop-filter: none; } }
 @media (prefers-reduced-motion: reduce) { .glass { animation: none; } }
 

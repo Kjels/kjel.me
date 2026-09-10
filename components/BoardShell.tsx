@@ -80,7 +80,10 @@ export function BoardShell({ text, live, children }: { text?: BoardText; live?: 
         return rows;
       },
       scrollOffset: () => window.scrollY,
-      onFit: (b) => setDocHeight(b.vrows > b.rows ? Math.round(b.vrows * b.chh) : 0),
+      onFit: (b) => {
+        setDocHeight(b.vrows > b.rows ? Math.round(b.vrows * b.chh) : 0);
+        document.documentElement.style.setProperty("--dot", `${b.cw}px`); // the board's pitch, for dot text in HTML
+      },
       compose: (b) => scene.compose(b, modeRef.current === "full" ? pageFor(pathRef.current) : "STRIP:" + sectionFor(pathRef.current)),
       tick: scene.tick,
       external: scene.external,
