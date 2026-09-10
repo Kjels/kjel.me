@@ -1,34 +1,48 @@
 # kjel.me
 
-Source for [kjel.me](https://kjel.me). The landing page is a simulated flip-dot sign rendered on a single canvas: bitmap-font text, per-dot flip physics with afterglow, dithered page wipes, a halftoned portrait, and a live Spotify line. Behind it, a small site: work, writing, about.
+Source for [kjel.me](https://kjel.me). The whole site is one `<canvas>` running a simulated flip-dot sign. Landing, the work ledger, about, and each project entry are boards; the only HTML page is `/config`. Status and what's next in `ROADMAP.md`.
 
-The photos and text in `lib/board-text.ts` and `public/` are mine and not covered by the MIT license on the code.
+The photos and copy in `lib/board-text.ts`, `content/` and `public/` are mine and not covered by the MIT license on the code.
+
+## How it works
+
+One canvas, one frame loop, mounted once in the root layout by `components/BoardShell.tsx`. A scene composes a page into stamped text and raster layers; the engine turns that into a target per dot and animates each dot toward it with a little thermal mass, so a dot switching off cools through shades instead of snapping. Page changes are a dithered column wipe keyed by a stable per-cell hash.
+
+The grid is a fixed number of rows (141 landscape, 153 portrait) with a fluid dot size, so the composition is identical on a phone and a monitor. Text is a 5x7 bitmap face with a 3x5 small face; the portrait is halftoned onto the same grid.
+
+The landing is taller than the screen. The engine keeps a virtual board and the page scrolls it a row at a time, carrying dot state along so only the leading edge flips. Sections: home, WORK as numbered tiles, ABOUT. `?scroll=snap` settles on whole screens.
+
+Entries (`/work/[slug]`) are boards too: name, meta, a few short lines, roadmap ticks, links to the README and site. The long version of every project is its repo README; the ledger reads each repo's `ROADMAP.md` on GitHub at request time (status line, checkbox count), plus commit count and last push, cached an hour.
 
 ## Layout
 
 ```
 app/
-  page.tsx               the landing (the board is mounted in the layout)
-  work/, work/[slug]/    the ledger and its entries, roadmap read from GitHub hourly
-  about/                 the label
-  config/                board copy editor (password)
-  api/board              board copy read/write (Blob)
+  layout.tsx             mounts the board; every route renders inside it
+  page.tsx               the landing (a tall board)
+  work/[slug]/           one board per project; /work and /about redirect to /#work and /#about
+  config/                board copy editor (password), the one HTML page
+  api/board              board copy read/write (Vercel Blob)
   api/now                Spotify now-playing, 25s revalidate
   api/view               visit ping → email
+  opengraph-image.tsx    OG image in the board's face; robots, sitemap
 components/
-  BoardShell.tsx         one board across routes: full on /, a strip elsewhere
-  board/                 the engine (font, palette, raster, portrait, engine.ts) and scenes/
-  board/pictos.ts        one animated dot pictogram per project, for the ledger
-  Picto.tsx, TickRule.tsx
+  BoardShell.tsx         the canvas, scroll, route transitions, hotspots for links
+  board/engine.ts        Board class: grid, dot physics, wipes, layers, virtual rows, cursor modes
+  board/font.ts          5x7 and 3x5 bitmap faces
+  board/raster.ts        image → dot grid halftoning
+  board/portrait.ts      the halftoned photo with chroma-key backdrop removal
+  board/palette.ts       dot shades
+  board/scenes/kjel.ts   the site: landing, ledger tiles, about, entries, strip
 content/
-  work/index.ts          the project manifest; one .mdx body per project beside it
+  work/index.ts          the project manifest (slug, repo, status, stack, lines)
+  about.ts               the about lines and interests
 lib/
-  board-text.ts          every line the board stamps, with defaults
-  blob.ts                Blob reads via the public CDN (quota notes inside)
+  github.ts              ROADMAP.md, repo meta, commit count from GitHub, cached hourly
+  board-text.ts          every line the home screen stamps, with defaults
+  blob.ts                Blob reads via the public CDN
   sources/spotify.ts     refresh-token flow
   notify.ts              visit emails via Resend
-docs/
-  v2-scope.md            what's being built next
 ```
 
 ## Run it
@@ -39,14 +53,10 @@ npm install
 npm run dev
 ```
 
-With no env vars the board renders from `BOARD_DEFAULTS`. Spotify, Blob, and emails each switch on when their vars are present.
+With no env vars the board renders from `BOARD_DEFAULTS` and the ledger reads public repos anonymously. Spotify, Blob, GitHub token and emails each switch on when their vars are present.
 
-## Board
+Keys: `C` cycles cursor modes. `prefers-reduced-motion` swaps the wipe for a cut.
 
-The grid is a fixed 141 rows landscape, 153 portrait, and the dot size is fluid, so the composition is identical on every screen. Pages are hash routes (`/#work`, `/#about`), all composed inside `components/FlipdotBoard.tsx`. `prefers-reduced-motion` swaps the wipe for an instant cut.
+## Adding a project
 
-Keys: `C` cycles cursor modes. Click the portrait.
-
-## Status
-
-Live. The next version keeps the board as the landing and moves work, writing, and about to HTML pages under a board masthead. See `ROADMAP.md` and `docs/v2-scope.md`.
+Add an entry to `content/work/index.ts` with the repo as `owner/name`. Give the repo a `ROADMAP.md` with a `**Status: ...**` line and a `- [ ]` checklist; the ledger does the rest.

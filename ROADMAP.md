@@ -1,13 +1,13 @@
 # Roadmap
 
-**Status: live at [kjel.me](https://kjel.me), v2 in progress.** The whole site is one `<canvas>` running a simulated flip-dot sign: bitmap-font text, dithered page wipes, a halftoned portrait, live Spotify now-playing. Board copy is edited at `/config` and stored in Vercel Blob.
+**Status: live at [kjel.me](https://kjel.me), v2 shipped 2026-09-10.** The whole site is one `<canvas>` running a simulated flip-dot sign: the landing scrolls as a tall board (home, work ledger, about), each project entry is a board, and the ledger reads every repo's `ROADMAP.md` from GitHub. Only `/config` is HTML.
 
-v2 keeps the board as the landing and adds HTML pages for work, writing, and about under a board masthead. Scope in `docs/v2-scope.md`.
+What's left is the playful list at the bottom and the engine extraction. `docs/v2-scope.md` is the original scope; the HTML-pages plan in it was dropped for all-boards.
 
 ## What works today
 
-- Flip-dot engine in `components/FlipdotBoard.tsx`: 5×7 and 3×5 bitmap fonts, per-dot flip physics with afterglow, fixed row count with fluid dot size so composition is identical on every screen, `prefers-reduced-motion` honoured
-- Pages via hash routing, all in-board: home, work, now, about, notes
+- Flip-dot engine in `components/board/engine.ts`: 5×7 and 3×5 bitmap fonts, per-dot flip physics with afterglow, fixed row count with fluid dot size so composition is identical on every screen, virtual rows for the scrolling landing, `prefers-reduced-motion` honoured
+- Every page is a board: the tall landing (home, ledger, about) and one board per entry. `/config` is the only HTML
 - Raster → dot-grid halftoning, used for the portrait with chroma-key backdrop removal
 - Live Spotify line via refresh-token flow and a 25s-revalidated `/api/now`, polled only while the tab is visible
 - Board copy in Vercel Blob, edited at `/config`, validated server-side, revalidated on write. Reads go through the public CDN URL to stay inside the Hobby "advanced operations" quota
@@ -35,7 +35,7 @@ Ordered by value. Checked items are done.
 - [x] **Content layer.** Layout with masthead, MDX, `/work` with GitHub roadmap progress, `/work/[slug]`, `/about`. `/writing` waits for the first post
 - [x] **Work as cards.** Floating cards that flip like a dot on hover or focus (Details toggle on touch). Each project's mark is a lifeform from the identity's fauna run live under B3/S23 on an 11-cell torus. Life verbs for state, GEN from the commit count, tick rule for the roadmap. Entry pages with a sticky rail and prev/next. Helvetica only on content pages
 - [x] **Interface guidelines pass** (vercel-labs/web-interface-guidelines): focus rings, 44px targets, touch-action, theme colour, color-scheme, skip link, reduced motion, tabular numbers, curly quotes, anchored headings, a 404 with exits
-- [ ] **Push the project repos** so `/work` can read their roadmaps. Until then the progress bars are empty
+- [x] **Push the project repos** so the ledger can read their roadmaps
 - [ ] **Photos for KIMS** and any other project page that needs them
 - [x] **Landing.** Live line (what the ledger is building, last push), menu previews on hover, idle wave using the second portrait, now-playing in the strip
 - [x] **The landing scrolls.** A board taller than the screen: home, then WORK as a ledger, then ABOUT, all in dots, stepping a row at a time with dot state carried along so only the leading edge flips. Menu words scroll to sections. `?scroll=snap` for detents
