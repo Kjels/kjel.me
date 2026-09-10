@@ -88,6 +88,7 @@ export function BoardShell({ text, live, children }: { text?: BoardText; live?: 
       onCard: setCard,
       routes,
       onRoute: (path) => {
+        board.stopLife(); // leaving by any link leaves Life first
         // on the landing, WORK and ABOUT are sections of the board: scroll to them
         if (pathRef.current === "/") {
           const S = scene.sections(board.rows, board.cols);

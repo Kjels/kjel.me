@@ -216,6 +216,8 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
   function updateClock(b: Board, t: number) {
     const L = (clock ??= b.layer());
     const { cols, rows, wide, reduced } = b;
+    // Life clears the board: no clock, no role, no date
+    if (b.life) { if (L.key !== "life") { L.key = "life"; L.mask.fill(0); L.halo = null; clearNowHot(b); } return; }
     const scrolled = b.winRow > Math.round(rows * 0.3) || current.startsWith("ENTRY:");
     const home = current === "HOME" && !scrolled;
     const fi = reduced ? 0 : Math.floor(t / 2.8) % ROLES.length;
@@ -701,8 +703,8 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
 
   let markPinned = false;
   function updateMark(b: Board) {
-    // once the big mark has scrolled off, a small KJEL. takes the top-left, a link back to the top
-    const want = current === "HOME" && b.winRow > Math.round(b.rows * 0.3);
+    // once the big mark has scrolled off, or Life has cleared the board, a small KJEL. takes the top-left: the way home
+    const want = current === "HOME" && (b.winRow > Math.round(b.rows * 0.3) || !!b.life);
     if (want === markPinned || !pins) return;
     markPinned = want;
     if (want) { b.pinLink(pins, "KJEL.", 3, 3, true, "HOME"); bandHalo(b, pins, b.wide ? 11 : 21); }
