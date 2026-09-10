@@ -6,7 +6,7 @@ export const ABOUT_LINES = [
 ];
 
 /** the subheader under the ABOUT title, single size, in quotes */
-export const ABOUT_SUB = '"A MAN OF GREAT TASTES, EASILY DISTRACTED."';
+export const ABOUT_SUB = '"WAYWARD AND EASY TO DISTRACT."';
 
 export const ABOUT_INTERESTS_LABEL = "INTERESTS INCLUDE";
 export const ABOUT_INTERESTS = [
