@@ -45,7 +45,7 @@ export const PROJECTS: Project[] = [
     site: "https://kjel.me",
     started: "2026-08",
     stack: ["Next.js", "Canvas 2D", "Vercel"],
-    lines: ["YOU ARE LOOKING AT IT.", "141 ROWS. NO PIXELS.", "THE CYCLIST IS NOT FOR SALE."],
+    lines: ["YOU ARE LOOKING AT IT.", "141 ROWS. NO PIXELS.", "SOURCE ON GITHUB."],
     body: () => import("./kjel-me.mdx"),
   },
   {
