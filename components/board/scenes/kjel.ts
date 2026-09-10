@@ -8,7 +8,7 @@ import type { BoardText } from "@/lib/board-text";
 import { Board, type Layer, type LinkRec } from "../engine";
 import { DS, glyphM, measureCols, measureM, wrap, wrapM, fit } from "../font";
 import { loadPortrait } from "../portrait";
-import { ABOUT_LINES, ABOUT_INTERESTS, ABOUT_INTERESTS_LABEL } from "@/content/about";
+import { ABOUT_LINES, ABOUT_SUB, ABOUT_INTERESTS, ABOUT_INTERESTS_LABEL } from "@/content/about";
 import { TICKER } from "@/content/speech";
 
 /** one project, as the board shows it: a ledger line on the landing, a page of its own */
@@ -51,7 +51,8 @@ const aboutScale = (wide: boolean) => (wide ? 2 : 1);
 /** rows the about section needs: title, lines, the interests, links, air */
 function aboutRows(cols: number, wide: boolean) {
   const sc = aboutScale(wide), lh = sc * 7 + (sc > 1 ? 4 : 2), m = aboutMeasure(cols, wide);
-  let n = SECTION_PAD(wide) + 28 + 12;
+  let n = SECTION_PAD(wide) + 28 + 8;
+  n += wrap(ABOUT_SUB, 1, m).length * 9 + 10; // the subheader
   for (const para of ABOUT_LINES) n += wrap(para, sc, m).length * lh + 4;
   n += 8 + wrap(ABOUT_INTERESTS_LABEL, 1, m).length * 9 + 1; // the label
   n += wrap(ABOUT_INTERESTS.join(" / "), 1, m).length * 9;
@@ -346,46 +347,6 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
     }
   }
 
-  // Kilroy was here. 27 wide, 11 tall: the wall is row 6; the nose and the fingers hang below it
-  const KILROY = [
-    "...........#####...........",
-    ".........##.....##.........",
-    "........#.........#........",
-    ".......#...........#.......",
-    ".......#..#.....#..#.......",
-    ".......#.....#.....#.......",
-    "###########..#..###########",
-    ".##.##.##....#..##.##.##...",
-    ".##.##.##....#..##.##.##...",
-    ".............##............",
-    "..............#............",
-  ];
-
-  /* ---------- Kilroy, peeking over the bottom edge of the page ---------- */
-  let kilroy: Layer | null = null;
-  function updateKilroy(b: Board, t: number) {
-    const L = (kilroy ??= b.layer());
-    const { cols, rows, reduced } = b;
-    const on = current === "HOME" && !b.life;
-    const off = () => { if (L.key !== "off") { L.key = "off"; L.mask.fill(0); } };
-    if (!on) return off();
-    // the wall is the last row but four of the whole page; he blinks now and then
-    const y0 = b.vrows - 8 - 6 - b.winRow; // the wall sits eight rows up from the very bottom of the page
-    if (y0 + KILROY.length < 0 || y0 >= rows) return off();
-    const blink = !reduced && (t % 5.3) < 0.18;
-    const key = `${y0}|${blink ? 1 : 0}`;
-    if (key === L.key) return;
-    L.key = key;
-    L.mask.fill(0);
-    const x0 = Math.round(cols / 2) - 13;
-    for (let r = 0; r < KILROY.length; r++) for (let c = 0; c < KILROY[r].length; c++) {
-      if (KILROY[r][c] !== "#") continue;
-      if (blink && r === 4 && (c === 10 || c === 16)) continue;
-      const x = x0 + c, y = y0 + r;
-      if (x >= 0 && x < cols && y >= 0 && y < rows) L.mask[y * cols + x] = 1;
-    }
-  }
-
   /* ---------- the cyclist lapping the bottom of home ---------- */
   let play: Layer | null = null;
 
@@ -463,6 +424,7 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
     // the top line is pinned: it stays while the rest of the board scrolls beneath it
     const P = (pins ??= b.layer());
     P.mask.fill(0); P.key = "pins";
+    markPinned = false; // the pins are rebuilt bare; the small mark is pinned again by the next tick if the landing is scrolled
     b.pinnedRows = wide ? 12 : 22; // the top band the menu and the small mark live in
     b.extraLinks = b.extraLinks.filter((l) => !l.page.startsWith("PIN:"));
     {
@@ -584,8 +546,11 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
     // ABOUT: plain lines, then the interests with the strike as the bullet
     y = S.ABOUT + SECTION_PAD(wide);
     b.stamp("ABOUT", colL, y, sc * 2, undefined, false, true);
-    y += sc * 14 + 12;
+    y += sc * 14 + 8;
     const measure = aboutMeasure(cols, wide), asc = aboutScale(wide), lh = asc * 7 + (asc > 1 ? 4 : 2);
+    // the subheader: the quote, single size, under the title
+    for (const line of wrap(ABOUT_SUB, 1, measure)) { b.stamp(line, colL, y, 1); y += 9; }
+    y += 10;
     for (const para of ABOUT_LINES) {
       for (const line of wrap(para, asc, measure)) { b.stamp(line, colL, y, asc); y += lh; }
       y += 4;
@@ -852,7 +817,6 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
     updateGlider(b, t);
     updateTicker(b, t);
     updateFlag(b, t);
-    updateKilroy(b, t);
     updateLife(b);
   }
 
