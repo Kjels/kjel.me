@@ -57,7 +57,7 @@ function aboutRows(cols: number, wide: boolean) {
   for (const para of ABOUT_LINES) n += wrap(para, sc, m).length * lh + 4;
   n += 8 + wrap(ABOUT_INTERESTS_LABEL, 1, m).length * 9 + 1; // the label
   n += wrap(ABOUT_INTERESTS.join(" / "), 1, m).length * 9;
-  return n + 12 + 7 + 24;
+  return n + 12 + 7 + 12 + Math.round((wide ? 13 : 11) * 1.18) + 14; // the links, then the apple, then air
 }
 
 /** the sections, in menu order; each is an HTML route */
@@ -312,36 +312,6 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
     "##...........##",
   ];
 
-  /* ---------- the wheel: a fixed gear riding the bottom-right corner once the clock has left. it turns while you scroll and not otherwise ---------- */
-  let wheel: Layer | null = null;
-  function updateWheel(b: Board) {
-    const L = (wheel ??= b.layer());
-    L.cold = true;
-    const { cols, rows, wide, chh } = b;
-    const on = current === "HOME" && wide && !b.life && b.winRow > Math.round(rows * 0.3);
-    const off = () => { if (L.key !== "off") { L.key = "off"; L.mask.fill(0); } };
-    if (!on) return off();
-    // small enough for the gutter outside the content, so it never rides over a word
-    const R = 5, cx = cols - R - 2, cy = rows - R - 4;
-    // it rolls along the page: one turn per circumference of scroll, forward as you go down
-    const theta = window.scrollY / (R * chh);
-    const step = Math.round(theta * R * 2);
-    const key = `w|${step}`;
-    if (key === L.key) return;
-    L.key = key;
-    L.mask.fill(0);
-    const put = (x: number, y: number) => { const xi = Math.round(x), yi = Math.round(y); if (xi >= 0 && xi < cols && yi >= 0 && yi < rows) L.mask[yi * cols + xi] = 1; };
-    const n = Math.round(R * 7);
-    for (let a = 0; a < n; a++) { const th = (a / n) * Math.PI * 2; put(cx + Math.cos(th) * R, cy + Math.sin(th) * R); }
-    // four spokes and the hub, turning with the page. a valve stem on the rim gives the eye a mark to follow
-    for (let k = 0; k < 4; k++) {
-      const th = theta + (k * Math.PI) / 2;
-      for (let r = 1; r < R - 0.5; r += 0.7) put(cx + Math.cos(th) * r, cy + Math.sin(th) * r);
-    }
-    const vt = theta + Math.PI / 4;
-    put(cx + Math.cos(vt) * (R + 1), cy + Math.sin(vt) * (R + 1)); put(cx + Math.cos(vt) * (R + 2), cy + Math.sin(vt) * (R + 2));
-  }
-
   /* ---------- the flag: a jolly roger fluttering beside the ABOUT title ---------- */  /* ---------- the flag: a jolly roger fluttering beside the ABOUT title ---------- */
   let flag: Layer | null = null;
   function updateFlag(b: Board, t: number) {
@@ -450,28 +420,32 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
     }
   }
 
-  // a small apple, 7 wide by 8 tall. the only red thing on the board, and it is not mentioned anywhere
-  const APPLE = [
-    "...#...",
-    "..#.##.",
-    ".#####.",
-    "#######",
-    "#######",
-    "#######",
-    ".#####.",
-    "..#.#..",
-  ];
-  const APPLE_RED = "rgb(214,42,38)";
-  /** stamp the apple at a spot on the board and let a click on it play the film */
-  function stampApple(b: Board, x0: number, y0: number) {
-    const { cols, rows } = b;
-    for (let r = 0; r < APPLE.length; r++) for (let c = 0; c < APPLE[r].length; c++) {
-      if (APPLE[r][c] !== "#") continue;
+  // An apple, drawn rather than spelled: two shoulders with a dip between them, a full belly,
+  // a stem and a leaf. The only red thing on the board, and nothing anywhere mentions it.
+  const APPLE_RED = "rgb(206,38,34)";
+  function stampApple(b: Board, x0: number, y0: number, w: number) {
+    const h = Math.round(w * 1.18);
+    const { cols } = b, vrows = b.vrows; // the apple lives far down a virtual board
+    // normalised: u across, v down, with room above the body for the stem and leaf
+    const U = (c: number) => -1 + (c / (w - 1)) * 2;
+    const V = (r: number) => -1.34 + (r / (h - 1)) * 2.34;
+    const disc = (u: number, v: number, cx: number, cy: number, r: number) => (u - cx) ** 2 + (v - cy) ** 2 <= r * r;
+    const ell = (u: number, v: number, cx: number, cy: number, rx: number, ry: number, rot = 0) => {
+      const du = u - cx, dv = v - cy, cs = Math.cos(rot), sn = Math.sin(rot);
+      return ((du * cs + dv * sn) / rx) ** 2 + ((dv * cs - du * sn) / ry) ** 2 <= 1;
+    };
+    for (let r = 0; r < h; r++) for (let c = 0; c < w; c++) {
+      const u = U(c), v = V(r);
+      const body = disc(u, v, -0.36, -0.20, 0.60) || disc(u, v, 0.36, -0.20, 0.60) || ell(u, v, 0, 0.24, 0.90, 0.74);
+      // the stem leans right out of the dip; the leaf sits off it
+      const stem = ell(u, v, 0.09, -0.94, 0.075, 0.30, -0.32);
+      const leaf = ell(u, v, 0.46, -1.00, 0.30, 0.115, -0.42);
+      if (!(body || stem || leaf)) continue;
       const x = x0 + c, y = y0 + r;
-      if (x >= 0 && x < cols && y >= 0 && y < rows) b.block(x, y, 1, 1);
+      if (x >= 0 && x < cols && y >= 0 && y < vrows) b.block(x, y, 1, 1);
     }
-    b.tint(x0, y0, x0 + 7, y0 + 8, () => APPLE_RED);
-    b.hotAt((x0 - 2) * b.cw, (y0 - 2) * b.chh, 11 * b.cw, 12 * b.chh, "apple", () => b.playFilm("/film/bad-apple.bin"));
+    b.tint(x0, y0, x0 + w, y0 + h, () => APPLE_RED);
+    b.hotAt((x0 - 2) * b.cw, (y0 - 2) * b.chh, (w + 4) * b.cw, (h + 4) * b.chh, "apple", () => b.playFilm("/film/bad-apple.bin"));
   }
 
   /* ---------- compositions ---------- */
@@ -521,7 +495,6 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
       }
       // GAME OF LIFE: the one coloured thing on the board. opens a blank board to seed and run.
       // a glider laps a 7x7 torus beside it. it shares the clock's baseline
-      stampApple(b, cols - 9, Math.round(rows * 0.62));
       const lw = b.stamp("GAME OF LIFE", colL, rows - 26, 1, "LIFE");
       b.tint(colL, rows - 26, colL + lw, rows - 19, (t, x) => b.lifeColor(t, x));
       lifeWordAt = { x: colL, y: rows - 26 };
@@ -540,7 +513,6 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
         }
         irow += 4;
       }
-      stampApple(b, cols - 9, Math.min(irow + 10, rows - 74));
       // GAME OF LIFE in the small face, the glider beside it, above the role and the clock
       const ly = Math.min(irow + 4, rows - 62);
       const lw = b.stamp("GAME OF LIFE", colL, ly, 1, "LIFE", true);
@@ -635,6 +607,9 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
     b.stamp(live?.place || "BROOKLYN, NY", colL, y, 1); y += 10;
     b.stamp("EMAIL", colL, y, 1, "EMAIL", true, true);
     b.stamp("GITHUB", colL + measureM("EMAIL") + 8, y, 1, "GITHUB", true, true);
+    // the last thing on the page
+    const aw = wide ? 13 : 11;
+    stampApple(b, (wide ? Math.round(cols * 0.94) : cols - 3) - aw, y + 12, aw);
   }
 
   // the masthead: mark left, menu right, clock in the middle (from the layer)
@@ -948,7 +923,6 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
     updateTicker(b, t);
     updateFlip(b, t);
     updateFlag(b, t);
-    updateWheel(b);
     updateLife(b);
   }
 
