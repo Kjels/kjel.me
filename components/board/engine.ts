@@ -115,7 +115,7 @@ export class Board {
   cursorMode = 1; // C cycles: 0 none · 1 trail · 2 guides
   /** Conway's Life over the screen grid, seeded from whatever the dots show. null when off */
   /** cells live on a coarser lattice than the dots: k dots per cell, gw×gh cells, so a cell is a real click target */
-  life: { cells: Uint8Array; next: Uint8Array; at: number; gen: number; running: boolean; k: number; gw: number; gh: number } | null = null;
+  life: { cells: Uint8Array; next: Uint8Array; at: number; gen: number; running: boolean; k: number; gw: number; gh: number; /** the visitor has drawn something themselves */ touched: boolean } | null = null;
   /** performance.now()/1000 of the last pointer or key input */
   lastInput = 0;
   private paused = false;
@@ -147,6 +147,7 @@ export class Board {
       if (i < 0) return;
       this.paintTo = this.life.cells[i] ? 0 : 1;
       this.life.cells[i] = this.paintTo;
+      this.life.touched = true;
       this.painting = true; this.paintX = e.clientX; this.paintY = e.clientY;
     });
     on("pointermove", (e) => {
@@ -187,9 +188,10 @@ export class Board {
     const coarse = window.matchMedia("(pointer: coarse)").matches;
     const k = Math.max(2, Math.round((coarse ? 26 : 18) / this.cw));
     const gw = Math.ceil(this.cols / k), gh = Math.ceil(this.rows / k), n = gw * gh;
-    this.life = { cells: new Uint8Array(n), next: new Uint8Array(n), at: 0, gen: 0, running: false, k, gw, gh };
+    this.life = { cells: new Uint8Array(n), next: new Uint8Array(n), at: 0, gen: 0, running: false, k, gw, gh, touched: false };
     this.lifeOverflow = document.documentElement.style.overflow;
     document.documentElement.style.overflow = "hidden";
+    this.hots.dataset.life = "1"; // the page's own links step aside (CSS); only the editor's and the menu's stay live
     // a finger on the board paints; it must not scroll
     document.documentElement.style.touchAction = "none";
     this.canvas.style.touchAction = "none";
@@ -200,6 +202,7 @@ export class Board {
     if (!this.life) return;
     this.life = null;
     this.painting = false;
+    delete this.hots.dataset.life;
     document.documentElement.style.overflow = this.lifeOverflow;
     document.documentElement.style.touchAction = "";
     this.canvas.style.touchAction = "";
@@ -208,7 +211,19 @@ export class Board {
   /** run or pause the automaton */
   lifePlay() { if (this.life) { this.life.running = !this.life.running; this.life.at = 0; } }
 
-  lifeClear() { if (this.life) { this.life.cells.fill(0); this.life.gen = 0; this.life.running = false; } }
+  lifeClear() { if (this.life) { this.life.cells.fill(0); this.life.gen = 0; this.life.running = false; this.life.touched = true; } }
+
+  /** put a pattern on the grid, its top-left at a fraction of the width and height */
+  lifeSeed(pattern: string[], fx: number, fy: number) {
+    const L = this.life;
+    if (!L) return;
+    const x0 = Math.round(L.gw * fx), y0 = Math.round(L.gh * fy);
+    for (let r = 0; r < pattern.length; r++) for (let c = 0; c < pattern[r].length; c++) {
+      if (pattern[r][c] !== "#") continue;
+      const x = x0 + c, y = y0 + r;
+      if (x >= 0 && x < L.gw && y >= 0 && y < L.gh) L.cells[y * L.gw + x] = 1;
+    }
+  }
 
   private lifeOverflow = "";
   private painting = false;

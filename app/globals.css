@@ -51,6 +51,8 @@ body {
 .fd-canvas[data-ready] { transition: height 380ms cubic-bezier(0.4, 0, 0.2, 1); }
 .fd-hots { position: absolute; top: 0; left: 0; width: 100%; height: 0; z-index: 2; }
 .fd-hot { position: fixed; z-index: 2; display: block; cursor: pointer; }
+/* in the Life editor the page's links are inert so a finger or a mouse can paint anywhere; the editor's own and the menu stay */
+.fd-hots[data-life] .fd-hot:not([aria-label="life"]):not([aria-label^="life:"]):not([aria-label="home"]):not([aria-label="work"]):not([aria-label="about"]) { pointer-events: none; }
 /* the tall landing: a spacer gives the page its scroll length; the canvas stays fixed */
 .fd-scroll { position: relative; width: 1px; pointer-events: none; }
 html.fd-snap { scroll-snap-type: y mandatory; }

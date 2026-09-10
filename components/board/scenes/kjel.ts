@@ -312,41 +312,99 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
     "##...........##",
   ];
 
-  /* ---------- the wheel: a fixed gear under the flag. it turns while you scroll and not otherwise ---------- */
+  /* ---------- the wheel: a fixed gear riding the bottom-right corner once the clock has left. it turns while you scroll and not otherwise ---------- */
   let wheel: Layer | null = null;
   function updateWheel(b: Board) {
     const L = (wheel ??= b.layer());
     L.cold = true;
     const { cols, rows, wide, chh } = b;
-    const on = current === "HOME" && wide && !b.life;
+    const on = current === "HOME" && wide && !b.life && b.winRow > Math.round(rows * 0.3);
     const off = () => { if (L.key !== "off") { L.key = "off"; L.mask.fill(0); } };
     if (!on) return off();
-    const S = sectionRows(rows, cols, (live?.ledger ?? []).length);
-    const R = 13, cx = Math.round(cols * 0.94) - R - 1;
-    const cy = S.ABOUT + SECTION_PAD(true) - 4 + 30 + 10 + R - b.winRow; // under the flagpole
-    if (cy + R < 0 || cy - R >= rows) return off();
+    // small enough for the gutter outside the content, so it never rides over a word
+    const R = 5, cx = cols - R - 2, cy = rows - R - 4;
     // it rolls along the page: one turn per circumference of scroll, forward as you go down
     const theta = window.scrollY / (R * chh);
     const step = Math.round(theta * R * 2);
-    const key = `${cy}|${step}`;
+    const key = `w|${step}`;
     if (key === L.key) return;
     L.key = key;
     L.mask.fill(0);
-    const put = (x: number, y: number) => { const xi = Math.round(x), yi = Math.round(y); if (xi >= 0 && xi < cols && yi >= b.pinnedRows && yi < rows) L.mask[yi * cols + xi] = 1; };
-    // the rim
+    const put = (x: number, y: number) => { const xi = Math.round(x), yi = Math.round(y); if (xi >= 0 && xi < cols && yi >= 0 && yi < rows) L.mask[yi * cols + xi] = 1; };
     const n = Math.round(R * 7);
     for (let a = 0; a < n; a++) { const th = (a / n) * Math.PI * 2; put(cx + Math.cos(th) * R, cy + Math.sin(th) * R); }
     // four spokes and the hub, turning with the page. a valve stem on the rim gives the eye a mark to follow
     for (let k = 0; k < 4; k++) {
       const th = theta + (k * Math.PI) / 2;
-      for (let r = 2; r < R - 1; r += 0.7) put(cx + Math.cos(th) * r, cy + Math.sin(th) * r);
+      for (let r = 1; r < R - 0.5; r += 0.7) put(cx + Math.cos(th) * r, cy + Math.sin(th) * r);
     }
-    put(cx, cy); put(cx + 1, cy); put(cx, cy + 1); put(cx + 1, cy + 1);
     const vt = theta + Math.PI / 4;
     put(cx + Math.cos(vt) * (R + 1), cy + Math.sin(vt) * (R + 1)); put(cx + Math.cos(vt) * (R + 2), cy + Math.sin(vt) * (R + 2));
   }
 
-  /* ---------- the flag: a jolly roger fluttering beside the ABOUT title ---------- */
+  /* ---------- Go: a 9x9 corner under the flag. click an intersection to play; captures are real ---------- */
+  const GO_N = 9, GO_P = 4; // points a side, dots between lines
+  const go = { s: new Int8Array(GO_N * GO_N), turn: 1 as 1 | 2, prev: "" };
+  let goAt: { x: number; y: number } | null = null; // the top-left point, in board rows
+  let goL: Layer | null = null;
+  const goAdj = (i: number) => {
+    const r = Math.floor(i / GO_N), c = i % GO_N, out: number[] = [];
+    if (r > 0) out.push(i - GO_N); if (r < GO_N - 1) out.push(i + GO_N); if (c > 0) out.push(i - 1); if (c < GO_N - 1) out.push(i + 1);
+    return out;
+  };
+  /** the connected group at i and how many liberties it has */
+  function goGroup(s: Int8Array, i: number) {
+    const colour = s[i], seen = new Set<number>([i]), stack = [i], libs = new Set<number>();
+    while (stack.length) {
+      const k = stack.pop()!;
+      for (const n of goAdj(k)) {
+        if (s[n] === 0) libs.add(n);
+        else if (s[n] === colour && !seen.has(n)) { seen.add(n); stack.push(n); }
+      }
+    }
+    return { stones: [...seen], libs: libs.size };
+  }
+  /** play at i for whoever's turn it is: captures, no suicide, no immediate ko */
+  function goPlay(i: number) {
+    if (go.s[i]) return false;
+    const me = go.turn, them = me === 1 ? 2 : 1, s2 = go.s.slice();
+    s2[i] = me;
+    for (const n of goAdj(i)) if (s2[n] === them) { const g = goGroup(s2, n); if (g.libs === 0) for (const k of g.stones) s2[k] = 0; }
+    if (goGroup(s2, i).libs === 0) return false;
+    const key = s2.join("");
+    if (key === go.prev) return false;
+    go.prev = go.s.join("");
+    go.s = s2; go.turn = them;
+    return true;
+  }
+  function updateGo(b: Board) {
+    const L = (goL ??= b.layer());
+    const { cols, rows, wide } = b;
+    const on = current === "HOME" && wide && !b.life && goAt;
+    const off = () => { if (L.key !== "off") { L.key = "off"; L.mask.fill(0); L.halo = null; } };
+    if (!on) return off();
+    const y0 = goAt!.y - b.winRow, x0 = goAt!.x;
+    if (y0 + (GO_N - 1) * GO_P + 2 < 0 || y0 - 2 >= rows) return off();
+    const key = go.s.join("") + "|" + go.turn + "|" + y0;
+    if (key === L.key) return;
+    L.key = key;
+    L.mask.fill(0);
+    const halo = (L.halo ??= new Uint8Array(cols * rows)); halo.fill(0);
+    const put = (x: number, y: number) => { if (x >= 0 && x < cols && y >= b.pinnedRows && y < rows) L.mask[y * cols + x] = 1; };
+    const dark = (x: number, y: number) => { if (x >= 0 && x < cols && y >= 0 && y < rows) halo[y * cols + x] = 1; };
+    // black is a solid 3x3, white a ring with a dark centre: two stones, one colour of dot
+    const stone = (cx: number, cy: number, colour: number) => {
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        if (colour === 2 && dx === 0 && dy === 0) { dark(cx, cy); continue; }
+        put(cx + dx, cy + dy);
+      }
+    };
+    for (let i = 0; i < go.s.length; i++) if (go.s[i]) stone(x0 + (i % GO_N) * GO_P, y0 + Math.floor(i / GO_N) * GO_P, go.s[i]);
+    // whose move: a stone waiting beside CLEAR under the board
+    stone(x0 + measureM("CLEAR") + 10, y0 + (GO_N - 1) * GO_P + 8, go.turn);
+  }
+
+  /* ---------- the flag: a jolly roger fluttering beside the ABOUT title ---------- */  /* ---------- the flag: a jolly roger fluttering beside the ABOUT title ---------- */
   let flag: Layer | null = null;
   function updateFlag(b: Board, t: number) {
     const L = (flag ??= b.layer());
@@ -609,6 +667,19 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
     for (const line of wrap(ABOUT_INTERESTS_LABEL, 1, measure)) { b.stamp(line, colL, y, 1); y += 9; }
     y += 1;
     for (const line of wrap(ABOUT_INTERESTS.join(" / "), 1, measure)) { b.stamp(line, colL, y, 1); y += 9; }
+    // Go, in the right column under the flag: 81 points as single dots; stones come from the layer
+    if (wide) {
+      const right = Math.round(cols * 0.94), span = (GO_N - 1) * GO_P;
+      const gx = right - span - 1, gy = S.ABOUT + SECTION_PAD(true) + 28 + 8 + 9 + 12; // below the title and the quote line
+      goAt = { x: gx, y: gy };
+      for (let r = 0; r < GO_N; r++) for (let c = 0; c < GO_N; c++) b.block(gx + c * GO_P, gy + r * GO_P, 1, 1);
+      const hot = b.hotAt((gx - 2) * b.cw, (gy - 2) * b.chh, (span + 5) * b.cw, (span + 5) * b.chh, "go", () => {});
+      hot.addEventListener("click", (ev) => {
+        const c = Math.round((ev.clientX / b.cw - gx) / GO_P), r = Math.round((ev.clientY / b.chh + b.winRow - gy) / GO_P);
+        if (c >= 0 && c < GO_N && r >= 0 && r < GO_N) goPlay(r * GO_N + c);
+      });
+      b.stamp("CLEAR", gx, gy + span + 6, 1, "GO:CLEAR", true);
+    } else goAt = null;
     y += 12;
     b.stamp(live?.place || "BROOKLYN, NY", colL, y, 1); y += 10;
     b.stamp("EMAIL", colL, y, 1, "EMAIL", true, true);
@@ -838,6 +909,17 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
   let lifeN: Layer | null = null; // the note or the generation count: rebuilt as it changes
   let lifeHots: HTMLAnchorElement[] = [];
   let lifeCKey = "off", lifeNKey = "off";
+  // the first time someone opens Life the board is not empty: a glider and a blinker are already there,
+  // and the note walks them through it until they draw something of their own
+  let lifeGuide = false;
+  const GLIDER_P = [".#.", "..#", "###"], BLINKER_P = ["###"];
+  const guideSeen = () => { try { return localStorage.getItem("life-seen") === "1"; } catch { return true; } };
+  const guideDone = () => { lifeGuide = false; try { localStorage.setItem("life-seen", "1"); } catch {} };
+  function guideText(life: NonNullable<Board["life"]>) {
+    if (!life.running && life.gen === 0) return "TWO SHAPES ARE ALREADY ON THE BOARD: A GLIDER AND A BLINKER. PRESS PLAY TO SEE WHAT THEY DO.";
+    if (life.gen < 24) return "EVERY CELL LOOKS AT ITS EIGHT NEIGHBOURS. TWO OR THREE ALIVE AND IT LIVES ON. EXACTLY THREE AROUND AN EMPTY ONE AND A CELL IS BORN.";
+    return "THE GLIDER WALKS. THE BLINKER BLINKS. PAUSE, THEN CLICK ANY CELL TO FLIP IT, OR DRAG TO PAINT. CLEAR STARTS OVER.";
+  }
   function updateLife(b: Board) {
     const C = (lifeC ??= b.layer()), N = (lifeN ??= b.layer());
     const life = b.life;
@@ -855,6 +937,12 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
     }
     const { wide } = b, { x: colL, y } = lifeWordAt;
     const ck = life!.running ? "run" : "edit";
+    if (lifeCKey === "off") {
+      // just opened: the first visit gets the guided board
+      lifeGuide = !guideSeen();
+      if (lifeGuide) { b.lifeSeed(GLIDER_P, 0.28, 0.3); b.lifeSeed(BLINKER_P, 0.6, 0.5); }
+    }
+    if (lifeGuide && (life!.touched || life!.gen > 90)) guideDone();
     if (ck !== lifeCKey) {
       lifeCKey = ck;
       C.mask.fill(0);
@@ -880,12 +968,14 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
       lifeHots = Array.from(b.hots.children).slice(n0) as HTMLAnchorElement[];
       b.haloOf(C);
     }
-    const nk = life!.running ? "GEN " + life!.gen : "edit";
+    const guide = lifeGuide ? guideText(life!) : "";
+    const nk = (life!.running ? "GEN " + life!.gen : "edit") + "|" + guide;
     if (nk !== lifeNKey) {
       lifeNKey = nk;
       N.mask.fill(0);
-      // only the generation count while it runs; WHAT IS THIS covers the rest
-      const lines = life!.running ? [nk] : [];
+      // the generation count while it runs; the guide's note on a first visit. WHAT IS THIS covers the rest
+      const { cols } = b;
+      const lines = [...(guide ? wrapM(guide, Math.round(cols * (wide ? 0.5 : 0.9)) - colL) : []), ...(life!.running ? ["GEN " + life!.gen] : [])];
       let ny = wide ? y - 2 - lines.length * 7 : y + 27; // above the word when wide, under the buttons when narrow
       for (const line of lines) { b.stampInto(N.mask, line, colL, ny, 1, true); ny += 7; }
       b.haloOf(N);
@@ -903,6 +993,8 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
   }
 
   function tick(b: Board, t: number) {
+    // the eyes only make sense on the still home screen: scrolling or Life puts them out
+    if (laser.on && (b.winRow > 0 || b.life)) laser.on = false;
     updateClock(b, t);
     updatePlay(b, t);
     updatePreview(b);
@@ -912,6 +1004,7 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
     updateFlip(b, t);
     updateFlag(b, t);
     updateWheel(b);
+    updateGo(b);
     updateLife(b);
   }
 
@@ -930,7 +1023,7 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
 
   return {
     compose, tick, load, destroy, external,
-    actions: { LIFE: (b: Board) => b.toggleLife(), "LIFE:PLAY": (b: Board) => b.lifePlay(), "LIFE:CLEAR": (b: Board) => b.lifeClear(), "LIFE:INFO": (b: Board) => b.card("life") } as Record<string, (b: Board) => void>,
+    actions: { LIFE: (b: Board) => b.toggleLife(), "LIFE:PLAY": (b: Board) => b.lifePlay(), "LIFE:CLEAR": (b: Board) => b.lifeClear(), "LIFE:INFO": (b: Board) => b.card("life"), "GO:CLEAR": () => { go.s.fill(0); go.turn = 1; go.prev = ""; } } as Record<string, (b: Board) => void>,
     rows: (W: number, H: number) => (W / H > 1.05 ? 141 : 153),
     /** total rows of the tall landing: home, the ledger, then what about needs */
     height: (rows: number, cols: number) => sectionRows(rows, cols, (live?.ledger ?? []).length).ABOUT + Math.max(rows, aboutRows(cols, cols / rows > 1.05)),
