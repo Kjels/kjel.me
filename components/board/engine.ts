@@ -5,7 +5,7 @@
 // hover underlines, cursor trail, hotspots for links.
 
 import { glyph, glyphM, measureCols, measureM } from "./font";
-import { ON, OFF, BG, HEAT, HEAT_FREE } from "./palette";
+import { ON, OFF, BG, HEAT, HEAT_FREE, accentRGB, accentCSS } from "./palette";
 import { hash2, easeInOut, rasterToCells } from "./raster";
 import { PW, PH } from "./portrait";
 
@@ -54,8 +54,6 @@ export type BoardOptions = {
   hotsMode?: "absolute";
 };
 
-/** the one colour on the board, still: for LIVE and for links under the hand */
-const LIVE = "rgb(96,255,140)";
 const HELV = '"Helvetica Neue", Helvetica, Arial, sans-serif';
 const TRANS = 0.75;
 
@@ -175,9 +173,9 @@ export class Board {
     this.tints.push({ x0, y0, x1, y1, color });
   }
 
-  /** the one colour on the board: phosphor green with a shimmer running along x */
+  /** the one colour on the board (see palette.ts), with a shimmer running along x */
   lifeColor(t: number, x: number) {
-    return `rgba(96,255,140,${(0.6 + 0.4 * Math.sin(t * 2.4 - x * 0.22)).toFixed(3)})`;
+    return `rgba(${accentRGB()},${(0.6 + 0.4 * Math.sin(t * 2.4 - x * 0.22)).toFixed(3)})`;
   }
 
   /* ---------- life: a blank board you seed by hand, then run ---------- */
@@ -877,7 +875,7 @@ export class Board {
       const uy = (l.pinned ? l.row : l.row - off) + l.gh * l.scale + 1;
       if (uy < 0 || uy >= rows) continue;
       const n = Math.round(l.wCols * l.hoverP);
-      ctx.fillStyle = LIVE; // reaching for a link is the one time the board answers in colour
+      ctx.fillStyle = accentCSS(); // reaching for a link is the one time the board answers in colour
       for (let c = 0; c < n; c++) {
         const xx = l.col + c;
         if (xx >= cols) break;

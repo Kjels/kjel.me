@@ -5,6 +5,8 @@ import { usePathname, useRouter } from "next/navigation";
 import { BOARD_DEFAULTS, type BoardText } from "@/lib/board-text";
 import { Board } from "./board/engine";
 import { GlassCard } from "./GlassCard";
+import { AccentPicker } from "./AccentPicker";
+import { initAccent } from "./board/palette";
 import { createKjelScene, NAV, STRIP_ROWS, STRIP_H, ROUTES, SCREENS, entryLink, sectionFor, type Live } from "./board/scenes/kjel";
 
 type Mode = "full" | "strip";
@@ -38,6 +40,19 @@ export function BoardShell({ text, live, children }: { text?: BoardText; live?: 
   const [docHeight, setDocHeight] = useState(0);
   // an HTML card over the board, opened by the scene (WHAT IS THIS) and closed by the reader
   const [card, setCard] = useState<string | null>(null);
+  // the accent sandbox: A opens it, ?accent=hex or localStorage set the colour on load
+  const [picker, setPicker] = useState(false);
+  useEffect(() => {
+    initAccent();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "a" && e.key !== "A") return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA")) return;
+      setPicker((p) => !p);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
   // ?scroll=snap makes the tall landing settle on whole screens; default is free, row-stepped scrolling
   const [snap] = useState(() => typeof location !== "undefined" && new URLSearchParams(location.search).get("scroll") === "snap");
 
@@ -200,6 +215,7 @@ export function BoardShell({ text, live, children }: { text?: BoardText; live?: 
       />
       <div ref={hotsRef} className="fd-hots" />
       <GlassCard id={card} onClose={() => { boardRef.current ? boardRef.current.card(null) : setCard(null); }} />
+      {picker && <AccentPicker onClose={() => setPicker(false)} />}
       {mode === "full" && docHeight > 0 && (
         <div className="fd-scroll" style={{ height: docHeight }} aria-hidden>
           {snap && Array.from({ length: SCREENS }, (_, i) => <div key={i} className="fd-snap-point" />)}
