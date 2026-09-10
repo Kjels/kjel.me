@@ -69,7 +69,7 @@ html.fd-snap { scroll-snap-type: y mandatory; }
 /* ---- glass cards: a pane laid on the board, for what the dots cannot say ---- */
 /* the sign's face for the title and close, plain type for the sentences, dots for diagrams. sweeps in like a page wipe.
    frosted-glass approximation; solid under reduced transparency */
-:root { --dot: 6px; --cell: 9px; --live: rgb(96, 255, 140); }
+:root { --dot: 6px; --cell: 9px; --live: rgb(255, 176, 0); }
 /* the board behind it blurs and dims, so the pane sits on a calm field */
 .glass-back { position: fixed; inset: 0; z-index: 5; background: rgba(10, 10, 10, 0.42); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); animation: glass-dim 0.3s ease-out both; }
 @keyframes glass-dim { from { opacity: 0; } to { opacity: 1; } }

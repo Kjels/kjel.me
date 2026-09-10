@@ -17,14 +17,14 @@ export const HEAT_FREE = Array.from({ length: 8 }, (_, k) => lerpHex(BG, ON, (0.
 /* ---------- the accent: the one colour on the board, swappable live ---------- */
 /** the candidates, each quoting a real display. hex without # */
 export const ACCENTS: { name: string; hex: string; note: string }[] = [
-  { name: "AMBER", hex: "ffb000", note: "flip-dot and LED destination boards" },
+  { name: "AMBER", hex: "ffb000", note: "flip-dot and LED destination boards. the default" },
   { name: "VFD", hex: "78ebd2", note: "vacuum fluorescent, hi-fi and microwaves" },
   { name: "PHOSPHOR", hex: "33ff66", note: "P1 oscilloscope green" },
   { name: "SIGNAL", hex: "ff453a", note: "railway and alarm red" },
   { name: "SODIUM", hex: "ff963c", note: "streetlamp orange" },
   { name: "LIME", hex: "60ff8c", note: "where it started" },
 ];
-export const DEFAULT_ACCENT = "60ff8c";
+export const DEFAULT_ACCENT = "ffb000";
 let accent = DEFAULT_ACCENT;
 const hexToRgb = (hex: string) => [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16));
 /** the current accent as "r,g,b", for rgba() strings in the engine */
