@@ -36,6 +36,8 @@ export type BoardOptions = {
   actions?: Record<string, (b: Board) => void>;
   /** called when a routed link is clicked; the shell wipes the board and navigates */
   onRoute?: (path: string) => void;
+  /** open an HTML card over the board by id, or null to close it. The shell renders it */
+  onCard?: (id: string | null) => void;
   reduced?: boolean;
   page?: string;
   /** false: no unlit grid. Only lit dots and their afterglow are drawn (pictograms) */
@@ -134,7 +136,7 @@ export class Board {
     };
     const touch = () => { this.lastInput = performance.now() / 1000; };
     this.lastInput = performance.now() / 1000;
-    on("keydown", (e) => { touch(); if (e.key === "c" || e.key === "C") this.cursorMode = (this.cursorMode + 1) % 3; if (e.key === "Escape") this.stopLife(); });
+    on("keydown", (e) => { touch(); if (e.key === "c" || e.key === "C") this.cursorMode = (this.cursorMode + 1) % 3; if (e.key === "Escape" && !this.cardOpen) this.stopLife(); });
     // the Life editor: press a dot to flip it, drag to paint
     on("pointerdown", (e) => {
       if (!this.life || e.button !== 0 || this.onHot(e.target)) return;
@@ -208,8 +210,14 @@ export class Board {
     return c < 0 || c >= this.cols || r < 0 || r >= this.rows ? -1 : r * this.cols + c;
   }
 
-  /** true when the event landed on a link hotspot rather than the board */
-  private onHot(t: EventTarget | null) { return t instanceof Element && t !== this.hots && this.hots.contains(t); }
+  /** true when the event landed on a link hotspot or an HTML card rather than the board */
+  private onHot(t: EventTarget | null) {
+    return t instanceof Element && ((t !== this.hots && this.hots.contains(t)) || !!t.closest("[data-glass]"));
+  }
+
+  /** a glass card over the board, drawn by the shell; null closes it. Esc goes to the card while one is open */
+  cardOpen = false;
+  card(id: string | null) { this.cardOpen = !!id; this.opts.onCard?.(id); }
 
   private stepLife() {
     const L = this.life!, { cols, rows } = this, a = L.cells, b = L.next;

@@ -43,7 +43,7 @@ Ordered by value. Checked items are done.
 - [ ] Strip ticker: the latest commit message crawling across the pinned line
 - [ ] Arrow keys step the landing one row; space pages
 - [ ] 404 as a board
-- [x] **GAME OF LIFE.** The one coloured thing on the board: a green word with a glider lapping a 7×7 torus beside it. Opens a blank board: click or drag dots to seed, PLAY runs, PAUSE edits, CLEAR wipes, WHAT IS THIS explains, the word or Esc leaves
+- [x] **GAME OF LIFE.** The one coloured thing on the board: a green word with a glider lapping a 7×7 torus beside it. Opens a blank board: click or drag dots to seed, PLAY runs, PAUSE edits, CLEAR wipes, WHAT IS THIS opens a glass card (HTML over the board, the first of the kind), the word or Esc leaves
 - [x] Cursor trail on by default (`C` still cycles none, trail, guides)
 - [x] Screen-space layers (clock, pins) leave no afterglow when the landing scrolls
 - [ ] Drag to flip dots on the landing, healing after a moment

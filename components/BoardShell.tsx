@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { BOARD_DEFAULTS, type BoardText } from "@/lib/board-text";
 import { Board } from "./board/engine";
+import { GlassCard } from "./GlassCard";
 import { createKjelScene, NAV, STRIP_ROWS, STRIP_H, ROUTES, SCREENS, entryLink, sectionFor, type Live } from "./board/scenes/kjel";
 
 type Mode = "full" | "strip";
@@ -35,6 +36,8 @@ export function BoardShell({ text, live, children }: { text?: BoardText; live?: 
   const [mode, setMode] = useState<Mode>(modeFor(pathname));
   const [ready, setReady] = useState(false);
   const [docHeight, setDocHeight] = useState(0);
+  // an HTML card over the board, opened by the scene (WHAT IS THIS) and closed by the reader
+  const [card, setCard] = useState<string | null>(null);
   // ?scroll=snap makes the tall landing settle on whole screens; default is free, row-stepped scrolling
   const [snap] = useState(() => typeof location !== "undefined" && new URLSearchParams(location.search).get("scroll") === "snap");
 
@@ -82,6 +85,7 @@ export function BoardShell({ text, live, children }: { text?: BoardText; live?: 
       tick: scene.tick,
       external: scene.external,
       actions: scene.actions,
+      onCard: setCard,
       routes,
       onRoute: (path) => {
         // on the landing, WORK and ABOUT are sections of the board: scroll to them
@@ -191,6 +195,7 @@ export function BoardShell({ text, live, children }: { text?: BoardText; live?: 
           : "kjel.me masthead, a flip-dot strip with the clock and navigation."}
       />
       <div ref={hotsRef} className="fd-hots" />
+      <GlassCard id={card} onClose={() => { boardRef.current ? boardRef.current.card(null) : setCard(null); }} />
       {mode === "full" && docHeight > 0 && (
         <div className="fd-scroll" style={{ height: docHeight }} aria-hidden>
           {snap && Array.from({ length: SCREENS }, (_, i) => <div key={i} className="fd-snap-point" />)}
