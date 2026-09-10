@@ -876,10 +876,11 @@ export class Board {
       else if (life && !lit && !haloed) { const ci = ((y / life.k) | 0) * life.gw + ((x / life.k) | 0); target = life.cells[ci] || (ci === lifeCur ? 1 : 0); }
       const pv = dotV[i];
       const wasCold = coldPrev[i]; coldPrev[i] = lit && cold ? 1 : 0;
-      dotV[i] += (target - dotV[i]) * (reduced || wasCold ? 1 : 0.38);
+      // a film runs faster than the board's own pace: the dots flip harder so motion stays legible
+      dotV[i] += (target - dotV[i]) * (reduced || wasCold ? 1 : film ? 0.72 : 0.38);
       const v = dotV[i];
       if (!reduced) {
-        if (pv > 0.5 && v <= 0.5) heat[i] = wasCold ? 0 : 1;
+        if (pv > 0.5 && v <= 0.5) heat[i] = wasCold || film ? 0 : 1;
         else if (heat[i] > 0.02) heat[i] *= 0.96;
         else heat[i] = 0;
       }
