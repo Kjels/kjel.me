@@ -8,7 +8,6 @@ import type { BoardText } from "@/lib/board-text";
 import { Board, type Layer, type LinkRec } from "../engine";
 import { DS, measureCols, measureM, wrap, wrapM, fit } from "../font";
 import { loadPortrait } from "../portrait";
-import { SEEDS } from "../pictos";
 import { ABOUT_LINES, ABOUT_INTERESTS, ABOUT_INTERESTS_LABEL } from "@/content/about";
 
 /** one project, as the board shows it: a ledger line on the landing, a page of its own */
@@ -32,7 +31,7 @@ function tileGrid(rows: number, cols: number, n: number) {
   const colL = wide ? Math.round(cols * 0.06) : 3, right = wide ? Math.round(cols * 0.94) : cols - 3;
   const per = 1;
   const tw = right - colL;
-  const th = wide ? TILE_H : 82;
+  const th = wide ? TILE_H : 70;
   const top = rows + (wide ? WORK_HEAD : SECTION_PAD(false) + 14 + 12);
   const tiles = Array.from({ length: n }, (_, i) => ({ x: colL + (i % per) * (tw + TILE_GAP), y: top + Math.floor(i / per) * (th + TILE_GAP), w: tw, h: th }));
   return { tiles, end: top + Math.ceil(n / per) * (th + TILE_GAP) + 12, wide };
@@ -83,7 +82,6 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
   const external: Record<string, string> = { EMAIL: "mailto:hello@kjel.me", GITHUB: "https://github.com/Kjels" };
   let pins: Layer | null = null; // the pinned top line on the tall landing
 
-  const LN = 11; // the lifeforms' square
   let portrait: HTMLCanvasElement | null = null;
 
   /* ---------- laser eyes: click the portrait, the meme happens ---------- */
@@ -448,17 +446,12 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
       // the box: a single-dot border
       for (let x = t.x; x < t.x + t.w; x++) { b.block(x, t.y, 1, 1); b.block(x, t.y + t.h - 1, 1, 1); }
       for (let yy = t.y; yy < t.y + t.h; yy++) { b.block(t.x, yy, 1, 1); b.block(t.x + t.w - 1, yy, 1, 1); }
-      const seed = SEEDS[e.slug];
-      // the lifeform, still: 2x2 blocks on a 3-dot pitch, centred in an 11-cell square
-      const drawSeed = (ox: number, oy: number, pitch: number, blk: number) => {
-        if (!seed) return;
-        const sy = Math.floor((LN - seed.length) / 2), sx = Math.floor((LN - seed[0].length) / 2);
-        for (let r = 0; r < seed.length; r++) for (let c = 0; c < seed[r].length; c++) if (seed[r][c] === "1") b.block(ox + (sx + c) * pitch, oy + (sy + r) * pitch, blk, blk);
-      };
+      const no = String(i + 1).padStart(2, "0");
       const specs = [e.state, "SINCE " + e.since, e.gen, e.pushed ? "PUSHED " + e.pushed : null].filter(Boolean) as string[];
       if (wide) {
-        drawSeed(t.x + 5, t.y + Math.floor((t.h - LN * 3) / 2), 3, 2);
-        const nx = t.x + 5 + LN * 3 + 6, right = t.x + t.w - 5;
+        // the index, big, in the left of the box
+        b.stamp(no, t.x + 6, t.y + Math.floor((t.h - 21) / 2), 3);
+        const nx = t.x + 6 + measureCols(no) * 3 + 10, right = t.x + t.w - 5;
         let ly = t.y + 7;
         b.stamp(e.title.toUpperCase(), nx, ly, 2, entryLink(e.slug)); ly += 14 + 5;
         // one short line with some character; the one-liner lives on the entry
@@ -473,9 +466,9 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
           for (let k = 0; k < e.roadmap.total; k++) { const x = nx + k * 4; if (x + 2 > right - sw - 8) break; if (k < e.roadmap.done) b.block(x, by + 1, 2, 2); else b.block(x, by + 2, 1, 1); }
         }
       } else {
-        drawSeed(t.x + 4, t.y + 4, 2, 1);
+        b.stamp(no, t.x + 4, t.y + 5, 2);
         const nx = t.x + 4;
-        let ly = t.y + 4 + LN * 2 + 5;
+        let ly = t.y + 5 + 14 + 6;
         b.stamp(e.title.toUpperCase(), nx, ly, 1, entryLink(e.slug)); ly += 7 + 4;
         for (const line of wrapM((e.lines[0] || e.blurb).toUpperCase(), t.w - 8).slice(0, 2)) { b.stamp(line, nx, ly, 1, undefined, true); ly += 8; }
         ly += 3;
@@ -531,9 +524,10 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
   function entryLayout(rows: number, cols: number, e: Entry) {
     const wide = cols / rows > 1.05;
     const colL = wide ? Math.round(cols * 0.06) : 3, sc = wide ? 3 : 2;
-    const measure = wide ? Math.round(cols * 0.6) : cols - 6;
-    const title = wrap(e.title.toUpperCase(), sc, wide ? Math.round(cols * 0.6) : cols - 6);
-    const blurb = wrap(e.blurb.toUpperCase(), 1, wide ? Math.round(cols * 0.66) : measure);
+    // the text column stops short of the big number on the right
+    const measure = wide ? Math.round(cols * 0.55) : cols - 6;
+    const title = wrap(e.title.toUpperCase(), sc, wide ? Math.round(cols * 0.55) : cols - 6);
+    const blurb = wrap(e.blurb.toUpperCase(), 1, measure);
     const fun = e.lines.flatMap((l) => wrapM(l, measure));
     const metaText = [e.state, "SINCE " + e.since, e.gen, e.pushed ? "PUSHED " + e.pushed : null].filter(Boolean).join("  ");
     const meta = wrapM(metaText, measure);
@@ -574,15 +568,13 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
     y = L.yBlurb; for (const line of L.blurb) { b.stamp(line, colL, y, 1); y += 9; }
     // the short lines, in the small face
     y = L.yFun; for (const l of L.fun) { b.stamp(l, colL, y, 1, undefined, true); y += 8; }
-    // the lifeform, still. wide: large, where the portrait sits on the landing. narrow: beside a one-line title
-    if (wide) {
-      const seed = SEEDS[slug], sc = 5;
-      if (seed) { const ox = Math.round(cols * 0.78) - Math.floor(LN * sc / 2), oy = Math.round(rows * 0.4) - Math.floor(LN * sc / 2), sy = Math.floor((LN - seed.length) / 2), sx = Math.floor((LN - seed[0].length) / 2);
-        for (let r = 0; r < seed.length; r++) for (let c = 0; c < seed[r].length; c++) if (seed[r][c] === "1") b.block(ox + (sx + c) * sc, oy + (sy + r) * sc, sc - 1, sc - 1); }
-    }
-    if (!wide && L.title.length === 1) {
-      const seed = SEEDS[slug], tw = measureCols(L.title[0]) * sc;
-      if (seed && colL + tw + 4 + seed[0].length * 2 <= cols - 3) for (let r = 0; r < seed.length; r++) for (let c = 0; c < seed[r].length; c++) if (seed[r][c] === "1") b.block(cols - 3 - (seed[r].length - c) * 2, L.yTitle + r * 2, 2, 2);
+    // the entry's number, large, where the portrait sits on the landing
+    {
+      const idx = live?.ledger.findIndex((x) => x.slug === slug) ?? -1;
+      const no = String(idx + 1).padStart(2, "0"), nsc = wide ? 6 : 3;
+      const w = measureCols(no) * nsc;
+      if (wide) b.stamp(no, Math.round(cols * 0.78) - Math.floor(w / 2), Math.round(rows * 0.4) - Math.floor(7 * nsc / 2), nsc);
+      else if (L.title.length === 1 && colL + measureCols(L.title[0]) * sc + 6 + w <= cols - 3) b.stamp(no, cols - 3 - w, L.yTitle, nsc);
     }
     // links follow the text
     const ly = L.yLinks; let lx = colL;
@@ -591,7 +583,7 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
     b.stamp("ALL WORK", lx, ly, 1, "WORK", true, true);
     // the roadmap as ticks under the lifeform: done are blocks, open are single dots
     if (e.roadmap && e.roadmap.total && wide) {
-      const n = e.roadmap.total, tw = n * 4 - 2, tx = Math.round(cols * 0.78) - Math.floor(tw / 2), ty = Math.round(rows * 0.4) + Math.floor(LN * 5 / 2) + 8;
+      const n = e.roadmap.total, tw = n * 4 - 2, tx = Math.round(cols * 0.78) - Math.floor(tw / 2), ty = Math.round(rows * 0.4) + 21 + 8;
       for (let i = 0; i < n; i++) { const x = tx + i * 4; if (x < 0 || x + 2 > cols) continue; if (i < e.roadmap.done) b.block(x, ty, 2, 2); else b.block(x, ty + 1, 1, 1); }
       const lbl = `${String(e.roadmap.done).padStart(2, "0")}/${String(e.roadmap.total).padStart(2, "0")}`;
       b.stamp(lbl, Math.round(cols * 0.78) - Math.floor(measureM(lbl) / 2), ty + 6, 1, undefined, true);
