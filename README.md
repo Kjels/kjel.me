@@ -55,7 +55,7 @@ npm run dev
 
 With no env vars the board renders from `BOARD_DEFAULTS` and the ledger reads public repos anonymously. Spotify, Blob, GitHub token and emails each switch on when their vars are present.
 
-Keys: `C` cycles cursor modes. `prefers-reduced-motion` swaps the wipe for a cut.
+Keys: `C` cycles cursor modes, `Esc` leaves Life. `prefers-reduced-motion` swaps the wipe for a cut.
 
 ## Adding a project
 

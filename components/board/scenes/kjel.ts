@@ -292,7 +292,7 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
     const L = (play ??= b.layer());
     const { cols, rows, wide, reduced } = b;
     const pm = L.mask;
-    const on = current === "HOME" && wide && !reduced && b.winRow < 2; // he laps the first screen only
+    const on = current === "HOME" && wide && !reduced && b.winRow < 2 && !b.life; // he laps the first screen only, and sits out Life
     if (!on) {
       if (L.key !== "off") { L.key = "off"; pm.fill(0); }
       return;
@@ -397,7 +397,7 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
         }
         irow += 4;
       }
-      // LIFE: the page becomes the seed of Conway's automaton. it shares the clock's baseline
+      // LIFE: opens a blank board to seed by hand and run. it shares the clock's baseline
       b.stamp("LIFE", colL, rows - 26, 1, "LIFE");
     } else {
       const colL = 3;
@@ -619,22 +619,52 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
     b.haloOf(L);
   }
 
-  /* ---------- life: the word stays lit and says what is happening ---------- */
-  let lifeL: Layer | null = null;
+  /* ---------- life: the controls and the note, in two layers over a blank board ---------- */
+  let lifeC: Layer | null = null; // the word and the buttons: rebuilt when a button's label changes
+  let lifeN: Layer | null = null; // the note or the generation count: rebuilt as it changes
+  let lifeHots: HTMLAnchorElement[] = [];
+  let lifeCKey = "off", lifeNKey = "off";
   function updateLife(b: Board) {
-    const L = (lifeL ??= b.layer());
-    const on = !!b.life && current === "HOME" && b.wide;
-    if (!on) { if (L.key !== "off") { L.key = "off"; L.mask.fill(0); L.halo = null; } return; }
-    if (L.key === "on") return;
-    L.key = "on";
-    L.mask.fill(0);
-    const { cols, rows } = b, colL = Math.round(cols * 0.06);
-    // the note sits above the word, clear of the clock on the right
-    const lines = wrapM("CONWAY'S GAME OF LIFE, SEEDED FROM THIS PAGE. THE CURSOR SOWS. CLICK LIFE OR ESC TO STOP.", Math.round(cols * 0.5) - colL);
-    let y = rows - 26 - 4 - lines.length * 7;
-    for (const line of lines) { b.stampInto(L.mask, line, colL, y, 1, true); y += 7; }
-    b.stampInto(L.mask, "LIFE", colL, rows - 26, 1);
-    b.haloOf(L);
+    const C = (lifeC ??= b.layer()), N = (lifeN ??= b.layer());
+    const life = b.life;
+    const on = !!life && current === "HOME" && b.wide;
+    if (!on) {
+      if (lifeCKey !== "off") {
+        lifeCKey = lifeNKey = "off";
+        C.mask.fill(0); C.halo = null; N.mask.fill(0); N.halo = null;
+        for (const a of lifeHots) a.remove();
+        lifeHots = [];
+        b.extraLinks = b.extraLinks.filter((l) => !l.page.startsWith("PIN:LIFE:"));
+      }
+      return;
+    }
+    const { cols, rows } = b, colL = Math.round(cols * 0.06), y = rows - 26;
+    const ck = life!.running ? "run" : "edit";
+    if (ck !== lifeCKey) {
+      lifeCKey = ck;
+      C.mask.fill(0);
+      for (const a of lifeHots) a.remove();
+      lifeHots = [];
+      b.extraLinks = b.extraLinks.filter((l) => !l.page.startsWith("PIN:LIFE:"));
+      // the word stays where it was (its own hotspot is still there and leaves the editor)
+      let x = colL;
+      b.stampInto(C.mask, "LIFE", x, y, 1); x += measureCols("LIFE") + 10;
+      const n0 = b.hots.childElementCount;
+      b.pinLink(C, life!.running ? "PAUSE" : "PLAY", x, y + 2, true, "LIFE:PLAY"); x += measureM("PAUSE") + 8;
+      b.pinLink(C, "CLEAR", x, y + 2, true, "LIFE:CLEAR");
+      lifeHots = Array.from(b.hots.children).slice(n0) as HTMLAnchorElement[];
+      b.haloOf(C);
+    }
+    const nk = life!.running ? "GEN " + life!.gen : "edit";
+    if (nk !== lifeNKey) {
+      lifeNKey = nk;
+      N.mask.fill(0);
+      // the note wraps short of the clock on the right
+      const lines = life!.running ? [nk] : wrapM("CLICK A DOT TO FLIP IT. DRAG TO PAINT. THEN PLAY.", Math.round(cols * 0.5) - colL);
+      let ny = y - 2 - lines.length * 7;
+      for (const line of lines) { b.stampInto(N.mask, line, colL, ny, 1, true); ny += 7; }
+      b.haloOf(N);
+    }
   }
 
   let markPinned = false;
@@ -670,7 +700,7 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
 
   return {
     compose, tick, load, destroy, external,
-    actions: { LIFE: (b: Board) => b.toggleLife() } as Record<string, (b: Board) => void>,
+    actions: { LIFE: (b: Board) => b.toggleLife(), "LIFE:PLAY": (b: Board) => b.lifePlay(), "LIFE:CLEAR": (b: Board) => b.lifeClear() } as Record<string, (b: Board) => void>,
     rows: (W: number, H: number) => (W / H > 1.05 ? 141 : 153),
     /** total rows of the tall landing: home, the ledger, then what about needs */
     height: (rows: number, cols: number) => sectionRows(rows, cols, (live?.ledger ?? []).length).ABOUT + Math.max(rows, aboutRows(cols, cols / rows > 1.05)),

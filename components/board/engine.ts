@@ -108,7 +108,7 @@ export class Board {
 
   cursorMode = 1; // C cycles: 0 none · 1 trail · 2 guides
   /** Conway's Life over the screen grid, seeded from whatever the dots show. null when off */
-  life: { cells: Uint8Array; next: Uint8Array; at: number; gen: number } | null = null;
+  life: { cells: Uint8Array; next: Uint8Array; at: number; gen: number; running: boolean } | null = null;
   /** performance.now()/1000 of the last pointer or key input */
   lastInput = 0;
   private paused = false;
@@ -132,7 +132,25 @@ export class Board {
     };
     const touch = () => { this.lastInput = performance.now() / 1000; };
     this.lastInput = performance.now() / 1000;
-    on("keydown", (e) => { touch(); if (e.key === "c" || e.key === "C") this.cursorMode = (this.cursorMode + 1) % 3; if (e.key === "Escape") this.life = null; });
+    on("keydown", (e) => { touch(); if (e.key === "c" || e.key === "C") this.cursorMode = (this.cursorMode + 1) % 3; if (e.key === "Escape") this.stopLife(); });
+    // the Life editor: press a dot to flip it, drag to paint
+    on("pointerdown", (e) => {
+      if (!this.life || e.button !== 0 || this.onHot(e.target)) return;
+      const i = this.cellAt(e.clientX, e.clientY);
+      if (i < 0) return;
+      this.paintTo = this.life.cells[i] ? 0 : 1;
+      this.life.cells[i] = this.paintTo;
+      this.painting = true; this.paintX = e.clientX; this.paintY = e.clientY;
+    });
+    on("pointermove", (e) => {
+      if (!this.painting || !this.life) return;
+      // walk from the last point so a fast drag leaves no gaps
+      const x0 = this.paintX, y0 = this.paintY, x1 = e.clientX, y1 = e.clientY;
+      const n = Math.max(1, Math.ceil(Math.hypot(x1 - x0, y1 - y0) / Math.min(this.cw, this.chh)));
+      for (let k = 0; k <= n; k++) { const i = this.cellAt(x0 + ((x1 - x0) * k) / n, y0 + ((y1 - y0) * k) / n); if (i >= 0) this.life.cells[i] = this.paintTo; }
+      this.paintX = x1; this.paintY = y1;
+    });
+    on("pointerup", () => { this.painting = false; });
     on("mousemove", (e) => { touch(); this.mx = e.clientX; this.my = e.clientY; });
     on("mouseout", () => { this.mx = -1e4; this.my = -1e4; });
     on("touchmove", (e) => { touch(); if (e.touches[0]) { this.mx = e.touches[0].clientX; this.my = e.touches[0].clientY; } }, { passive: true });
@@ -143,16 +161,43 @@ export class Board {
 
   get wide() { return this.W / this.H > 1.05; }
 
-  /* ---------- life ---------- */
+  /* ---------- life: a blank board you seed by hand, then run ---------- */
 
-  /** start Life (B3/S23) from the current dots, or stop it if it is running */
+  /** enter the Life editor (an empty grid, scroll locked), or leave it if it is open */
   toggleLife() {
-    if (this.life) { this.life = null; return; }
-    const n = this.cols * this.rows, cells = new Uint8Array(n);
-    for (let i = 0; i < n; i++) cells[i] = this.dotV[i] > 0.5 ? 1 : 0;
-    this.life = { cells, next: new Uint8Array(n), at: 0, gen: 0 };
+    if (this.life) { this.stopLife(); return; }
+    const n = this.cols * this.rows;
+    this.life = { cells: new Uint8Array(n), next: new Uint8Array(n), at: 0, gen: 0, running: false };
+    this.lifeOverflow = document.documentElement.style.overflow;
+    document.documentElement.style.overflow = "hidden";
     this.lastInput = performance.now() / 1000;
   }
+
+  stopLife() {
+    if (!this.life) return;
+    this.life = null;
+    this.painting = false;
+    document.documentElement.style.overflow = this.lifeOverflow;
+  }
+
+  /** run or pause the automaton */
+  lifePlay() { if (this.life) { this.life.running = !this.life.running; this.life.at = 0; } }
+
+  lifeClear() { if (this.life) { this.life.cells.fill(0); this.life.gen = 0; this.life.running = false; } }
+
+  private lifeOverflow = "";
+  private painting = false;
+  private paintTo = 1;
+  private paintX = 0; private paintY = 0;
+
+  /** screen index of the dot under a client point, -1 outside */
+  private cellAt(x: number, y: number) {
+    const c = Math.floor(x / this.cw), r = Math.floor(y / this.chh);
+    return c < 0 || c >= this.cols || r < 0 || r >= this.rows ? -1 : r * this.cols + c;
+  }
+
+  /** true when the event landed on a link hotspot rather than the board */
+  private onHot(t: EventTarget | null) { return t instanceof Element && t !== this.hots && this.hots.contains(t); }
 
   private stepLife() {
     const L = this.life!, { cols, rows } = this, a = L.cells, b = L.next;
@@ -342,8 +387,8 @@ export class Board {
     const rec: LinkRec = { page: "PIN:" + link, col, row, scale: 1, wCols, gh, hover: false, hoverP: 0, pinned: true };
     this.extraLinks = this.extraLinks.filter((l) => l.page !== rec.page);
     this.extraLinks.push(rec);
-    const ext = this.opts.external?.[link], route = this.opts.routes?.[link];
-    const fn = ext ? undefined : route ? () => this.opts.onRoute?.(route) : () => this.navigate(link);
+    const ext = this.opts.external?.[link], route = this.opts.routes?.[link], act = this.opts.actions?.[link];
+    const fn = ext ? undefined : act ? () => act(this) : route ? () => this.opts.onRoute?.(route) : () => this.navigate(link);
     const hw = Math.max(44, wCols * cw + 12), hh2 = Math.max(44, gh * chh + 12);
     const was = this.pinHots; this.pinHots = true;
     const a = this.hotAt(col * cw + (wCols * cw) / 2 - hw / 2, row * chh + (gh * chh) / 2 - hh2 / 2, hw, hh2, link.toLowerCase(), fn, ext || route);
@@ -400,7 +445,7 @@ export class Board {
 
   /** run the scene's compose for a page, then derive everything the frame needs */
   compose(page = this.page) {
-    this.life = null;
+    this.stopLife();
     const { cols, vrows, SW, cw, chh } = this;
     const SHv = this.src.height;
     this.sctx.fillStyle = "#000"; this.sctx.fillRect(0, 0, SW, SHv);
@@ -601,7 +646,8 @@ export class Board {
     const { mx, my } = this;
     const trailV = this.trailV, cursorMode = this.cursorMode;
     const curCol = Math.floor(mx / cw), curRow = Math.floor(my / chh);
-    if (!reduced && cursorMode === 1 && trailV && mx > -9999) {
+    const life = this.life;
+    if (!reduced && !life && cursorMode === 1 && trailV && mx > -9999) {
       if (Math.hypot(mx - this.pmx, my - this.pmy) > 300 || this.pmx < -9999) { this.pmx = mx; this.pmy = my; }
       const x0 = this.pmx / cw, y0 = this.pmy / chh, x1 = mx / cw, y1 = my / chh;
       const steps = Math.min(80, Math.max(1, Math.ceil(Math.hypot(x1 - x0, y1 - y0))));
@@ -642,7 +688,7 @@ export class Board {
     // re-flip. only the rows revealed at the edge start dark and flip in. pinned rows stay put.
     const k = off - this.prevWinRow;
     if (k !== 0) {
-      this.life = null; // life is in screen space; a scroll ends it
+      this.stopLife(); // life is in screen space; a scroll ends it
       const band = Math.min(rows, this.pinnedRows), from = band * cols, to = rows * cols;
       // the layers (clock, pins) are screen space: lift their dots out before the shift so they leave
       // no afterglow behind, and set them back after so they do not re-flip
@@ -658,12 +704,9 @@ export class Board {
       for (let i = from; i < to; i++) if (layered[i]) { dotV[i] = layered[i] === 2 ? 1 : 0; heat[i] = 0; }
       this.prevWinRow = off;
     }
-    // life: step the automaton at 8 Hz; the cursor sows live cells
-    const life = this.life;
-    if (life && !inTrans) {
-      if (t - life.at > 0.125) { this.stepLife(); life.at = t; }
-      if (trailV && cursorMode === 1) for (let i = 0; i < life.cells.length; i++) if (trailV[i] > 0.6) life.cells[i] = 1;
-    }
+    // life: step the automaton at 8 Hz while it runs; the dot under the cursor is the cursor
+    if (life && life.running && !inTrans && t - life.at > 0.125) { this.stepLife(); life.at = t; }
+    const lifeCur = life && mx > -9999 && !this.onHot(document.elementFromPoint(mx, my)) ? this.cellAt(mx, my) : -1;
     for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) {
       const i = y * cols + x, vy = y + off, vi = vy * cols + x;
       const useOld = inTrans && prevLum !== null && x + hash2(x, vy) * 8 > sweep;
@@ -694,9 +737,9 @@ export class Board {
       // cursor layers (C toggles): stamped text is untouchable; guides live in the void only
       if (trailV && trailV[i] > 0) {
         trailV[i] *= 0.9;
-        if (!reduced && cursorMode === 1 && m === 0 && trailV[i] > 0.25) target = 1;
+        if (!reduced && !life && cursorMode === 1 && m === 0 && trailV[i] > 0.25) target = 1;
       }
-      if (!reduced && cursorMode === 2 && m === 0 && guideOK && guideOK[vi] && mx > -9999 &&
+      if (!reduced && !life && cursorMode === 2 && m === 0 && guideOK && guideOK[vi] && mx > -9999 &&
           (x === curCol || y === curRow) && (x + y) % 3 === 0) {
         target = 1;
       }
@@ -706,7 +749,7 @@ export class Board {
         const span = rp.x1 - rp.x0 + 4, head = rp.p * span, u = x - rp.x0 + hash2(x, ry) * 2;
         if (u < head && u > head - span * 0.3) target = 1 - target;
       }
-      if (life && !lit && !haloed) target = life.cells[i];
+      if (life && !lit && !haloed) target = life.cells[i] || (i === lifeCur ? 1 : 0);
       const pv = dotV[i];
       dotV[i] += (target - dotV[i]) * (reduced ? 1 : 0.38);
       const v = dotV[i];

@@ -43,7 +43,7 @@ Ordered by value. Checked items are done.
 - [ ] Strip ticker: the latest commit message crawling across the pinned line
 - [ ] Arrow keys step the landing one row; space pages
 - [ ] 404 as a board
-- [x] **LIFE.** The word on the home screen runs Conway's Life over the page as its seed; the cursor sows cells; Esc, a click or a scroll stops it
+- [x] **LIFE.** The word on the home screen opens a blank board: click or drag dots to seed, PLAY runs Conway's Life, PAUSE edits, CLEAR wipes, LIFE or Esc leaves
 - [x] Cursor trail on by default (`C` still cycles none, trail, guides)
 - [x] Screen-space layers (clock, pins) leave no afterglow when the landing scrolls
 - [ ] Drag to flip dots on the landing, healing after a moment
