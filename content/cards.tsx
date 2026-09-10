@@ -1,22 +1,37 @@
 import type { ReactNode } from "react";
 
 // The glass cards: what the board says when a dot line is not enough.
-// Plain sentences, mixed case, real type. One card per id. The first sentence carries the name.
-export type Card = { lead: string; body: ReactNode };
+// Plain sentences, mixed case, real type. One card per id.
+export type Card = {
+  title: string;
+  intro: ReactNode;
+  /** rows of a rule table: [state, condition, outcome] */
+  rules?: [string, string, string][];
+  after?: ReactNode;
+};
 
 export const CARDS: Record<string, Card> = {
   life: {
-    lead: "Conway's Game of Life. A grid of cells, three rules, no player.",
-    body: (
-      <>
-        <p>
-          Each tick, every cell looks at its eight neighbours. A live cell with two or three live neighbours stays alive.
-          A dead cell with exactly three comes alive. Everything else is dead. That is all of it, and it is enough for
-          patterns that blink, glide, grow without end, or build other patterns. The green shape beside the word is a
-          glider, the smallest thing that travels.
-        </p>
-        <p>Here the board is the grid. Paint some cells and press play. A row of three is a good first try.</p>
-      </>
+    title: "Conway's Game of Life",
+    intro: (
+      <p>
+        A cellular automaton devised by John Conway in 1970. Every cell on the grid is either alive or dead. The grid
+        advances in steps, and at each step every cell is updated at once, according to how many of its eight
+        neighbouring cells are alive.
+      </p>
+    ),
+    rules: [
+      ["Live cell", "fewer than 2 live neighbours", "dies"],
+      ["Live cell", "2 or 3 live neighbours", "survives"],
+      ["Live cell", "more than 3 live neighbours", "dies"],
+      ["Dead cell", "exactly 3 live neighbours", "becomes alive"],
+    ],
+    after: (
+      <p>
+        Here the board is the grid and its edges wrap around. Click a cell to flip it, drag to paint several, then
+        Play. Pause to edit, Clear to start over. The green shape beside the word on the home screen is a glider, a
+        five-cell pattern that moves one cell diagonally every four steps.
+      </p>
     ),
   },
 };

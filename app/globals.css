@@ -67,28 +67,37 @@ html.fd-snap { scroll-snap-type: y mandatory; }
 }
 
 /* ---- glass cards: a pane laid on the board, for what the dots cannot say ---- */
-/* sharp like the grid, a hairline edge, no eyebrow, no footnote. frosted-glass approximation, solid under reduced transparency */
+/* sharp like the grid, a hairline edge lit from above, no eyebrow, no footnote. frosted-glass approximation, solid under reduced transparency */
 .glass-back { position: fixed; inset: 0; z-index: 5; }
 .glass {
   position: fixed; z-index: 6;
-  left: 6vw; bottom: 28vh; width: min(30rem, 88vw);
-  padding: 26px 28px 26px; border-radius: 0;
+  left: 6vw; bottom: 27vh; width: min(38rem, 90vw); max-height: calc(100dvh - 29vh - 24px); overflow: auto;
+  padding: 30px 34px 32px; border-radius: 0;
   color: var(--fg);
-  background: rgba(20, 20, 20, 0.62);
-  -webkit-backdrop-filter: blur(20px) saturate(1.25); backdrop-filter: blur(20px) saturate(1.25);
+  background:
+    linear-gradient(180deg, rgba(244, 244, 242, 0.035), rgba(244, 244, 242, 0) 40%),
+    rgba(18, 18, 18, 0.66);
+  -webkit-backdrop-filter: blur(22px) saturate(1.25); backdrop-filter: blur(22px) saturate(1.25);
   border: 1px solid var(--rule);
-  box-shadow: inset 0 1px 0 rgba(244, 244, 242, 0.08), 0 24px 60px rgba(10, 10, 10, 0.45);
+  box-shadow: inset 0 1px 0 rgba(244, 244, 242, 0.1), 0 30px 70px rgba(10, 10, 10, 0.5);
   animation: glass-in 0.26s cubic-bezier(0.2, 0.7, 0.2, 1) both;
   outline: none;
 }
-@media (max-width: 720px) { .glass { left: 5vw; right: 5vw; width: auto; bottom: 12vh; } }
-@keyframes glass-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 .glass:focus-visible { outline: none; }
-.glass-close { position: absolute; top: 14px; right: 14px; background: none; border: 0; padding: 10px 12px; font: inherit; font-size: 13px; color: var(--fg2); cursor: pointer; }
+@media (max-width: 720px) { .glass { left: 5vw; right: 5vw; width: auto; bottom: 10vh; padding: 24px 22px 26px; } }
+@keyframes glass-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.glass-close { position: absolute; top: 18px; right: 18px; background: none; border: 0; padding: 10px 12px; font: inherit; font-size: 14px; color: var(--fg2); cursor: pointer; }
 .glass-close:hover { color: var(--fg); }
-.glass-lead { margin: 0 0 14px; padding-right: 64px; font-size: 17px; font-weight: 500; line-height: 1.35; letter-spacing: -0.005em; }
-.glass-body p { margin: 0 0 12px; font-size: 15px; line-height: 1.55; color: var(--fg2); max-width: 62ch; }
+.glass-title { margin: 0 0 16px; padding-right: 72px; font-size: 24px; font-weight: 500; line-height: 1.2; letter-spacing: -0.012em; }
+.glass-body p { margin: 0 0 14px; font-size: 16.5px; line-height: 1.55; color: var(--fg); max-width: 60ch; }
 .glass-body p:last-child { margin-bottom: 0; }
+.glass-rules { width: 100%; border-collapse: collapse; margin: 18px 0 20px; font-size: 16px; line-height: 1.4; }
+.glass-rules tr { border-top: 1px solid var(--rule); }
+.glass-rules tr:last-child { border-bottom: 1px solid var(--rule); }
+.glass-rules th, .glass-rules td { padding: 11px 0; text-align: left; vertical-align: baseline; font-weight: 400; }
+.glass-rules th { color: var(--fg2); width: 6.5em; padding-right: 16px; white-space: nowrap; }
+.glass-rules td { color: var(--fg); padding-right: 16px; }
+.glass-rules .glass-out { width: 8.5em; padding-right: 0; text-align: right; white-space: nowrap; }
 @media (prefers-reduced-transparency: reduce) { .glass { background: var(--raised); -webkit-backdrop-filter: none; backdrop-filter: none; } }
 @media (prefers-reduced-motion: reduce) { .glass { animation: none; } }
 

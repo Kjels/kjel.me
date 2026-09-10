@@ -458,14 +458,11 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
         // one short line with some character; the one-liner lives on the entry
         const tag = (e.lines[0] || e.blurb).toUpperCase();
         for (const line of wrap(tag, 1, right - nx).slice(0, 1)) { b.stamp(line, nx, ly, 1); ly += 9; }
-        // the bottom line: roadmap ticks left, the specs right, in the small face
+        // the bottom line: the specs, right-aligned, in the small face
         const by = t.y + t.h - 10;
         let spec = specs.join("   "), sw = measureM(spec);
         while (sw > right - nx - 40 && specs.length > 2) { specs.pop(); spec = specs.join("   "); sw = measureM(spec); }
         b.stamp(spec, right - sw, by, 1, undefined, true);
-        if (e.roadmap && e.roadmap.total) {
-          for (let k = 0; k < e.roadmap.total; k++) { const x = nx + k * 4; if (x + 2 > right - sw - 8) break; if (k < e.roadmap.done) b.block(x, by + 1, 2, 2); else b.block(x, by + 2, 1, 1); }
-        }
       } else {
         b.stamp(no, t.x + 4, t.y + 5, 2);
         const nx = t.x + 4;
@@ -580,12 +577,10 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
     if (e.repo) { b.stamp("README", lx, ly, 1, "README", true, true); lx += measureM("README") + 8; }
     if (e.site) { b.stamp("SITE", lx, ly, 1, "SITE", true, true); lx += measureM("SITE") + 8; }
     b.stamp("ALL WORK", lx, ly, 1, "WORK", true, true);
-    // the roadmap as ticks under the lifeform: done are blocks, open are single dots
+    // the roadmap as a plain count, read from the repo's ROADMAP.md
     if (e.roadmap && e.roadmap.total && wide) {
-      const n = e.roadmap.total, tw = n * 4 - 2, tx = Math.round(cols * 0.78) - Math.floor(tw / 2), ty = Math.round(rows * 0.4) + 21 + 8;
-      for (let i = 0; i < n; i++) { const x = tx + i * 4; if (x < 0 || x + 2 > cols) continue; if (i < e.roadmap.done) b.block(x, ty, 2, 2); else b.block(x, ty + 1, 1, 1); }
-      const lbl = `${String(e.roadmap.done).padStart(2, "0")}/${String(e.roadmap.total).padStart(2, "0")}`;
-      b.stamp(lbl, Math.round(cols * 0.78) - Math.floor(measureM(lbl) / 2), ty + 6, 1, undefined, true);
+      const lbl = `ROADMAP ${e.roadmap.done}/${e.roadmap.total}`;
+      b.stamp(lbl, Math.round(cols * 0.78) - Math.floor(measureM(lbl) / 2), Math.round(rows * 0.4) + 21 + 10, 1, undefined, true);
     }
     external.README = e.repo ? `https://github.com/${e.repo}#readme` : "";
     external.SITE = e.site || "";
