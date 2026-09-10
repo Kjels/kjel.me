@@ -342,68 +342,6 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
     put(cx + Math.cos(vt) * (R + 1), cy + Math.sin(vt) * (R + 1)); put(cx + Math.cos(vt) * (R + 2), cy + Math.sin(vt) * (R + 2));
   }
 
-  /* ---------- Go: a 9x9 corner under the flag. click an intersection to play; captures are real ---------- */
-  const GO_N = 9, GO_P = 4; // points a side, dots between lines
-  const go = { s: new Int8Array(GO_N * GO_N), turn: 1 as 1 | 2, prev: "" };
-  let goAt: { x: number; y: number } | null = null; // the top-left point, in board rows
-  let goL: Layer | null = null;
-  const goAdj = (i: number) => {
-    const r = Math.floor(i / GO_N), c = i % GO_N, out: number[] = [];
-    if (r > 0) out.push(i - GO_N); if (r < GO_N - 1) out.push(i + GO_N); if (c > 0) out.push(i - 1); if (c < GO_N - 1) out.push(i + 1);
-    return out;
-  };
-  /** the connected group at i and how many liberties it has */
-  function goGroup(s: Int8Array, i: number) {
-    const colour = s[i], seen = new Set<number>([i]), stack = [i], libs = new Set<number>();
-    while (stack.length) {
-      const k = stack.pop()!;
-      for (const n of goAdj(k)) {
-        if (s[n] === 0) libs.add(n);
-        else if (s[n] === colour && !seen.has(n)) { seen.add(n); stack.push(n); }
-      }
-    }
-    return { stones: [...seen], libs: libs.size };
-  }
-  /** play at i for whoever's turn it is: captures, no suicide, no immediate ko */
-  function goPlay(i: number) {
-    if (go.s[i]) return false;
-    const me = go.turn, them = me === 1 ? 2 : 1, s2 = go.s.slice();
-    s2[i] = me;
-    for (const n of goAdj(i)) if (s2[n] === them) { const g = goGroup(s2, n); if (g.libs === 0) for (const k of g.stones) s2[k] = 0; }
-    if (goGroup(s2, i).libs === 0) return false;
-    const key = s2.join("");
-    if (key === go.prev) return false;
-    go.prev = go.s.join("");
-    go.s = s2; go.turn = them;
-    return true;
-  }
-  function updateGo(b: Board) {
-    const L = (goL ??= b.layer());
-    const { cols, rows, wide } = b;
-    const on = current === "HOME" && wide && !b.life && goAt;
-    const off = () => { if (L.key !== "off") { L.key = "off"; L.mask.fill(0); L.halo = null; } };
-    if (!on) return off();
-    const y0 = goAt!.y - b.winRow, x0 = goAt!.x;
-    if (y0 + (GO_N - 1) * GO_P + 2 < 0 || y0 - 2 >= rows) return off();
-    const key = go.s.join("") + "|" + go.turn + "|" + y0;
-    if (key === L.key) return;
-    L.key = key;
-    L.mask.fill(0);
-    const halo = (L.halo ??= new Uint8Array(cols * rows)); halo.fill(0);
-    const put = (x: number, y: number) => { if (x >= 0 && x < cols && y >= b.pinnedRows && y < rows) L.mask[y * cols + x] = 1; };
-    const dark = (x: number, y: number) => { if (x >= 0 && x < cols && y >= 0 && y < rows) halo[y * cols + x] = 1; };
-    // black is a solid 3x3, white a ring with a dark centre: two stones, one colour of dot
-    const stone = (cx: number, cy: number, colour: number) => {
-      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
-        if (colour === 2 && dx === 0 && dy === 0) { dark(cx, cy); continue; }
-        put(cx + dx, cy + dy);
-      }
-    };
-    for (let i = 0; i < go.s.length; i++) if (go.s[i]) stone(x0 + (i % GO_N) * GO_P, y0 + Math.floor(i / GO_N) * GO_P, go.s[i]);
-    // whose move: a stone waiting beside CLEAR under the board
-    stone(x0 + measureM("CLEAR") + 10, y0 + (GO_N - 1) * GO_P + 8, go.turn);
-  }
-
   /* ---------- the flag: a jolly roger fluttering beside the ABOUT title ---------- */  /* ---------- the flag: a jolly roger fluttering beside the ABOUT title ---------- */
   let flag: Layer | null = null;
   function updateFlag(b: Board, t: number) {
@@ -667,19 +605,6 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
     for (const line of wrap(ABOUT_INTERESTS_LABEL, 1, measure)) { b.stamp(line, colL, y, 1); y += 9; }
     y += 1;
     for (const line of wrap(ABOUT_INTERESTS.join(" / "), 1, measure)) { b.stamp(line, colL, y, 1); y += 9; }
-    // Go, in the right column under the flag: 81 points as single dots; stones come from the layer
-    if (wide) {
-      const right = Math.round(cols * 0.94), span = (GO_N - 1) * GO_P;
-      const gx = right - span - 1, gy = S.ABOUT + SECTION_PAD(true) + 28 + 8 + 9 + 12; // below the title and the quote line
-      goAt = { x: gx, y: gy };
-      for (let r = 0; r < GO_N; r++) for (let c = 0; c < GO_N; c++) b.block(gx + c * GO_P, gy + r * GO_P, 1, 1);
-      const hot = b.hotAt((gx - 2) * b.cw, (gy - 2) * b.chh, (span + 5) * b.cw, (span + 5) * b.chh, "go", () => {});
-      hot.addEventListener("click", (ev) => {
-        const c = Math.round((ev.clientX / b.cw - gx) / GO_P), r = Math.round((ev.clientY / b.chh + b.winRow - gy) / GO_P);
-        if (c >= 0 && c < GO_N && r >= 0 && r < GO_N) goPlay(r * GO_N + c);
-      });
-      b.stamp("CLEAR", gx, gy + span + 6, 1, "GO:CLEAR", true);
-    } else goAt = null;
     y += 12;
     b.stamp(live?.place || "BROOKLYN, NY", colL, y, 1); y += 10;
     b.stamp("EMAIL", colL, y, 1, "EMAIL", true, true);
@@ -1004,7 +929,6 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
     updateFlip(b, t);
     updateFlag(b, t);
     updateWheel(b);
-    updateGo(b);
     updateLife(b);
   }
 
@@ -1023,7 +947,7 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
 
   return {
     compose, tick, load, destroy, external,
-    actions: { LIFE: (b: Board) => b.toggleLife(), "LIFE:PLAY": (b: Board) => b.lifePlay(), "LIFE:CLEAR": (b: Board) => b.lifeClear(), "LIFE:INFO": (b: Board) => b.card("life"), "GO:CLEAR": () => { go.s.fill(0); go.turn = 1; go.prev = ""; } } as Record<string, (b: Board) => void>,
+    actions: { LIFE: (b: Board) => b.toggleLife(), "LIFE:PLAY": (b: Board) => b.lifePlay(), "LIFE:CLEAR": (b: Board) => b.lifeClear(), "LIFE:INFO": (b: Board) => b.card("life") } as Record<string, (b: Board) => void>,
     rows: (W: number, H: number) => (W / H > 1.05 ? 141 : 153),
     /** total rows of the tall landing: home, the ledger, then what about needs */
     height: (rows: number, cols: number) => sectionRows(rows, cols, (live?.ledger ?? []).length).ABOUT + Math.max(rows, aboutRows(cols, cols / rows > 1.05)),
