@@ -32,6 +32,8 @@ export type BoardOptions = {
   external?: Record<string, string>;
   /** link names that leave the board for another route, e.g. WORK → /work */
   routes?: Record<string, string>;
+  /** link names that do something on the board itself, e.g. LIFE → run the automaton */
+  actions?: Record<string, (b: Board) => void>;
   /** called when a routed link is clicked; the shell wipes the board and navigates */
   onRoute?: (path: string) => void;
   reduced?: boolean;
@@ -104,7 +106,9 @@ export class Board {
   layers: Layer[] = [];
   fx: Fx | null = null;
 
-  cursorMode = 0; // C cycles: 0 none · 1 trail · 2 guides
+  cursorMode = 1; // C cycles: 0 none · 1 trail · 2 guides
+  /** Conway's Life over the screen grid, seeded from whatever the dots show. null when off */
+  life: { cells: Uint8Array; next: Uint8Array; at: number; gen: number } | null = null;
   /** performance.now()/1000 of the last pointer or key input */
   lastInput = 0;
   private paused = false;
@@ -128,7 +132,7 @@ export class Board {
     };
     const touch = () => { this.lastInput = performance.now() / 1000; };
     this.lastInput = performance.now() / 1000;
-    on("keydown", (e) => { touch(); if (e.key === "c" || e.key === "C") this.cursorMode = (this.cursorMode + 1) % 3; });
+    on("keydown", (e) => { touch(); if (e.key === "c" || e.key === "C") this.cursorMode = (this.cursorMode + 1) % 3; if (e.key === "Escape") this.life = null; });
     on("mousemove", (e) => { touch(); this.mx = e.clientX; this.my = e.clientY; });
     on("mouseout", () => { this.mx = -1e4; this.my = -1e4; });
     on("touchmove", (e) => { touch(); if (e.touches[0]) { this.mx = e.touches[0].clientX; this.my = e.touches[0].clientY; } }, { passive: true });
@@ -138,6 +142,30 @@ export class Board {
   }
 
   get wide() { return this.W / this.H > 1.05; }
+
+  /* ---------- life ---------- */
+
+  /** start Life (B3/S23) from the current dots, or stop it if it is running */
+  toggleLife() {
+    if (this.life) { this.life = null; return; }
+    const n = this.cols * this.rows, cells = new Uint8Array(n);
+    for (let i = 0; i < n; i++) cells[i] = this.dotV[i] > 0.5 ? 1 : 0;
+    this.life = { cells, next: new Uint8Array(n), at: 0, gen: 0 };
+    this.lastInput = performance.now() / 1000;
+  }
+
+  private stepLife() {
+    const L = this.life!, { cols, rows } = this, a = L.cells, b = L.next;
+    for (let y = 0; y < rows; y++) {
+      const yu = (y === 0 ? rows - 1 : y - 1) * cols, yd = (y === rows - 1 ? 0 : y + 1) * cols, yc = y * cols;
+      for (let x = 0; x < cols; x++) {
+        const xl = x === 0 ? cols - 1 : x - 1, xr = x === cols - 1 ? 0 : x + 1;
+        const nb = a[yu + xl] + a[yu + x] + a[yu + xr] + a[yc + xl] + a[yc + xr] + a[yd + xl] + a[yd + x] + a[yd + xr];
+        b[yc + x] = nb === 3 || (nb === 2 && a[yc + x]) ? 1 : 0;
+      }
+    }
+    L.cells = b; L.next = a; L.gen++;
+  }
 
   /* ---------- dynamic layers ---------- */
 
@@ -212,7 +240,8 @@ export class Board {
       this.links.push(rec);
       const ext = this.opts.external?.[link];
       const route = this.opts.routes?.[link];
-      const fn = ext ? undefined : route ? () => this.opts.onRoute?.(route) : () => this.navigate(link);
+      const act = this.opts.actions?.[link];
+      const fn = ext ? undefined : act ? () => act(this) : route ? () => this.opts.onRoute?.(route) : () => this.navigate(link);
       // hot areas never dip below the 44px touch minimum, centered on the glyphs
       const hw = Math.max(44, wCols * cw + 12), hh2 = Math.max(44, gh * scale * chh + 12);
       const a = this.hotAt(col * cw + (wCols * cw) / 2 - hw / 2, row * chh + (gh * scale * chh) / 2 - hh2 / 2, hw, hh2,
@@ -371,6 +400,7 @@ export class Board {
 
   /** run the scene's compose for a page, then derive everything the frame needs */
   compose(page = this.page) {
+    this.life = null;
     const { cols, vrows, SW, cw, chh } = this;
     const SHv = this.src.height;
     this.sctx.fillStyle = "#000"; this.sctx.fillRect(0, 0, SW, SHv);
@@ -612,14 +642,27 @@ export class Board {
     // re-flip. only the rows revealed at the edge start dark and flip in. pinned rows stay put.
     const k = off - this.prevWinRow;
     if (k !== 0) {
+      this.life = null; // life is in screen space; a scroll ends it
       const band = Math.min(rows, this.pinnedRows), from = band * cols, to = rows * cols;
+      // the layers (clock, pins) are screen space: lift their dots out before the shift so they leave
+      // no afterglow behind, and set them back after so they do not re-flip
+      const layered = new Uint8Array(to);
+      for (let q = 0; q < nL; q++) { const m = layers[q].mask, h = layers[q].halo; for (let i = from; i < to; i++) { if (m[i]) layered[i] = 2; else if (h && h[i] && !layered[i]) layered[i] = 1; } }
+      for (let i = from; i < to; i++) if (layered[i]) { dotV[i] = 0; heat[i] = 0; if (trailV) trailV[i] = 0; }
       for (const arr of [dotV, heat, trailV]) {
         if (!arr) continue;
         if (k > 0 && k < rows - band) { arr.copyWithin(from, from + k * cols, to); arr.fill(0, to - k * cols, to); }
         else if (k < 0 && -k < rows - band) { arr.copyWithin(from - k * cols, from, to + k * cols); arr.fill(0, from, from - k * cols); }
         else arr.fill(0, from, to);
       }
+      for (let i = from; i < to; i++) if (layered[i]) { dotV[i] = layered[i] === 2 ? 1 : 0; heat[i] = 0; }
       this.prevWinRow = off;
+    }
+    // life: step the automaton at 8 Hz; the cursor sows live cells
+    const life = this.life;
+    if (life && !inTrans) {
+      if (t - life.at > 0.125) { this.stepLife(); life.at = t; }
+      if (trailV && cursorMode === 1) for (let i = 0; i < life.cells.length; i++) if (trailV[i] > 0.6) life.cells[i] = 1;
     }
     for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) {
       const i = y * cols + x, vy = y + off, vi = vy * cols + x;
@@ -663,6 +706,7 @@ export class Board {
         const span = rp.x1 - rp.x0 + 4, head = rp.p * span, u = x - rp.x0 + hash2(x, ry) * 2;
         if (u < head && u > head - span * 0.3) target = 1 - target;
       }
+      if (life && !lit && !haloed) target = life.cells[i];
       const pv = dotV[i];
       dotV[i] += (target - dotV[i]) * (reduced ? 1 : 0.38);
       const v = dotV[i];

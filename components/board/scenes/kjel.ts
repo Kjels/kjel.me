@@ -16,7 +16,7 @@ export type Entry = {
   repo?: string; site?: string; gen?: string | null; pushed?: string | null; roadmap?: { done: number; total: number } | null;
 };
 /** what the ledger knows right now, for the landing's live line, menu previews and the in-board ledger */
-export type Live = { building: string; pushed: string; entries: number; place: string; ledger: Entry[] };
+export type Live = { pushed: string; entries: number; place: string; ledger: Entry[] };
 
 /** the landing is three sections tall: home, work, about. home and work are a screen each; about takes what it needs */
 export const SCREENS = 3;
@@ -52,8 +52,8 @@ function aboutRows(cols: number, wide: boolean) {
   const sc = aboutScale(wide), lh = sc * 7 + (sc > 1 ? 4 : 2), m = aboutMeasure(cols, wide);
   let n = SECTION_PAD(wide) + 28 + 12;
   for (const para of ABOUT_LINES) n += wrap(para, sc, m).length * lh + 4;
-  n += 8 + lh + 4; // the label
-  for (const it of ABOUT_INTERESTS) n += wrap(it, sc, m - 8 * sc).length * lh + 2;
+  n += 8 + wrap(ABOUT_INTERESTS_LABEL, 1, m).length * 9 + 1; // the label
+  n += wrap(ABOUT_INTERESTS.join(" / "), 1, m).length * 9;
   return n + 12 + 7 + 24;
 }
 
@@ -397,13 +397,8 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
         }
         irow += 4;
       }
-      // the live line: what the ledger is building, and when it last moved.
-      // it shares the clock's baseline; the cyclist passes beneath it.
-      if (live?.building) {
-        b.stamp("NOW BUILDING", colL, rows - 33, 1, undefined, true);
-        const w = b.stamp(live.building, colL, rows - 26, 1, "WORK");
-        if (live.pushed) b.stamp("PUSHED " + live.pushed, colL + w + 6, rows - 25, 1, undefined, true);
-      }
+      // LIFE: the page becomes the seed of Conway's automaton. it shares the clock's baseline
+      b.stamp("LIFE", colL, rows - 26, 1, "LIFE");
     } else {
       const colL = 3;
       const titleTop = 13 + 14;
@@ -491,13 +486,11 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
       for (const line of wrap(para, asc, measure)) { b.stamp(line, colL, y, asc); y += lh; }
       y += 4;
     }
+    // the interests: one small run, so the section breathes
     y += 8;
-    b.stamp(ABOUT_INTERESTS_LABEL, colL, y, asc); y += lh + 4;
-    for (const it of ABOUT_INTERESTS) {
-      b.stampG(DS.SOLIDUS, colL, y, asc);
-      for (const line of wrap(it, asc, measure - 8 * asc)) { b.stamp(line, colL + 8 * asc, y, asc); y += lh; }
-      y += 2;
-    }
+    for (const line of wrap(ABOUT_INTERESTS_LABEL, 1, measure)) { b.stamp(line, colL, y, 1); y += 9; }
+    y += 1;
+    for (const line of wrap(ABOUT_INTERESTS.join(" / "), 1, measure)) { b.stamp(line, colL, y, 1); y += 9; }
     y += 12;
     b.stamp(live?.place || "BROOKLYN, NY", colL, y, 1); y += 10;
     b.stamp("EMAIL", colL, y, 1, "EMAIL", true, true);
@@ -626,13 +619,31 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
     b.haloOf(L);
   }
 
+  /* ---------- life: the word stays lit and says what is happening ---------- */
+  let lifeL: Layer | null = null;
+  function updateLife(b: Board) {
+    const L = (lifeL ??= b.layer());
+    const on = !!b.life && current === "HOME" && b.wide;
+    if (!on) { if (L.key !== "off") { L.key = "off"; L.mask.fill(0); L.halo = null; } return; }
+    if (L.key === "on") return;
+    L.key = "on";
+    L.mask.fill(0);
+    const { cols, rows } = b, colL = Math.round(cols * 0.06);
+    // the note sits above the word, clear of the clock on the right
+    const lines = wrapM("CONWAY'S GAME OF LIFE, SEEDED FROM THIS PAGE. THE CURSOR SOWS. CLICK LIFE OR ESC TO STOP.", Math.round(cols * 0.5) - colL);
+    let y = rows - 26 - 4 - lines.length * 7;
+    for (const line of lines) { b.stampInto(L.mask, line, colL, y, 1, true); y += 7; }
+    b.stampInto(L.mask, "LIFE", colL, rows - 26, 1);
+    b.haloOf(L);
+  }
+
   let markPinned = false;
   function updateMark(b: Board) {
     // once the big mark has scrolled off, a small KJEL. takes the top-left, a link back to the top
     const want = current === "HOME" && b.winRow > Math.round(b.rows * 0.3);
     if (want === markPinned || !pins) return;
     markPinned = want;
-    if (want) { b.pinLink(pins, "KJEL.", 3, 3, true, "HOME"); bandHalo(b, pins, 11); }
+    if (want) { b.pinLink(pins, "KJEL.", 3, 3, true, "HOME"); bandHalo(b, pins, b.wide ? 11 : 21); }
     else b.compose(); // rebuild the pins without it
   }
 
@@ -641,6 +652,7 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
     updatePlay(b, t);
     updatePreview(b);
     updateMark(b);
+    updateLife(b);
   }
 
   /** fetch the portrait, then recompose and deal the board in */
@@ -658,6 +670,7 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
 
   return {
     compose, tick, load, destroy, external,
+    actions: { LIFE: (b: Board) => b.toggleLife() } as Record<string, (b: Board) => void>,
     rows: (W: number, H: number) => (W / H > 1.05 ? 141 : 153),
     /** total rows of the tall landing: home, the ledger, then what about needs */
     height: (rows: number, cols: number) => sectionRows(rows, cols, (live?.ledger ?? []).length).ABOUT + Math.max(rows, aboutRows(cols, cols / rows > 1.05)),

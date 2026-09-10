@@ -3,10 +3,10 @@
 // exists, where it lives. The body of each page is the MDX file beside it;
 // status and progress come from each repo's ROADMAP.md at request time.
 
-export type Status = "live" | "building" | "prototype" | "parked";
+export type Status = "live" | "building" | "prototype" | "parked" | "idea";
 
 /** a project's state, in plain words */
-export const VERB: Record<Status, string> = { live: "LIVE", building: "BUILDING", prototype: "PROTOTYPE", parked: "PARKED" };
+export const VERB: Record<Status, string> = { live: "LIVE", building: "BUILDING", prototype: "PROTOTYPE", parked: "PARKED", idea: "IDEA" };
 
 export type Project = {
   slug: string;
@@ -28,12 +28,12 @@ export const PROJECTS: Project[] = [
   {
     slug: "kims",
     title: "KIMS",
-    blurb: "A kitchen appliance with a scale in it. Weigh what you eat, keep the pantry live, cook from what you have.",
+    blurb: "A very smart kitchen scale. Weigh what you eat, keep the pantry live, cook from what you have.",
     status: "building",
     repo: "Kjels/kims",
     started: "2026-08",
     stack: ["Raspberry Pi 4", "HX711 load cell", "Python", "vanilla JS", "OpenSCAD"],
-    lines: ["A SCALE WITH OPINIONS.", "PUT THE BOWL DOWN. TAP. DONE.", "THE PANTRY KEEPS ITSELF."],
+    lines: ["A VERY SMART KITCHEN SCALE.", "PUT THE BOWL DOWN. TAP. DONE.", "THE PANTRY KEEPS ITSELF."],
     body: () => import("./kims.mdx"),
   },
   {
@@ -80,6 +80,16 @@ export const PROJECTS: Project[] = [
     stack: ["Python", "Claude Agent SDK", "FastAPI", "React"],
     lines: ["A SPRINT IS A FOLDER.", "AGENTS IN WAVES.", "A HUMAN AT THE GATES."],
     body: () => import("./sprint-orchestrator.mdx"),
+  },
+  {
+    slug: "voice",
+    title: "Voice",
+    blurb: "Claude in your Gmail, learning how you write. It drafts, you edit, it keeps the difference.",
+    status: "idea",
+    started: "2026-09",
+    stack: ["Gmail API", "Claude"],
+    lines: ["IT DRAFTS. YOU EDIT.", "IT KEEPS THE DIFFERENCE.", "TUNED TO HOW YOU ACTUALLY WRITE."],
+    body: () => import("./voice.mdx"),
   },
 ];
 

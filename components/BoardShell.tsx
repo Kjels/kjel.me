@@ -81,6 +81,7 @@ export function BoardShell({ text, live, children }: { text?: BoardText; live?: 
       compose: (b) => scene.compose(b, modeRef.current === "full" ? pageFor(pathRef.current) : "STRIP:" + sectionFor(pathRef.current)),
       tick: scene.tick,
       external: scene.external,
+      actions: scene.actions,
       routes,
       onRoute: (path) => {
         // on the landing, WORK and ABOUT are sections of the board: scroll to them

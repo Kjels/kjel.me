@@ -8,17 +8,16 @@ import { PROJECTS, VERB } from "@/content/work";
 import { fetchRepo, fetchRoadmap, fetchCommitCount, ago, gen } from "@/lib/github";
 import type { Live } from "@/components/board/scenes/kjel";
 
-// what the landing says about the ledger: the most recently pushed project
+// what the board knows about the ledger: last push, and each repo's roadmap
 async function getLive(): Promise<Live> {
   const data = await Promise.all(PROJECTS.map(async (p) => {
     const [repo, roadmap, commits] = p.repo ? await Promise.all([fetchRepo(p.repo), fetchRoadmap(p.repo), fetchCommitCount(p.repo)]) : [null, null, null];
     return { p, repo, roadmap, commits };
   }));
-  let best = -1, when = "";
-  data.forEach((d, i) => { if (d.repo && d.repo.pushedAt > when) { when = d.repo.pushedAt; best = i; } });
-  const building = best >= 0 ? data[best].p.title.toUpperCase() : (PROJECTS.find((p) => p.status === "building")?.title.toUpperCase() ?? "");
+  let when = "";
+  for (const d of data) if (d.repo && d.repo.pushedAt > when) when = d.repo.pushedAt;
   return {
-    building, pushed: when ? ago(when).toUpperCase() : "", entries: PROJECTS.length, place: "BROOKLYN, NY",
+    pushed: when ? ago(when).toUpperCase() : "", entries: PROJECTS.length, place: "BROOKLYN, NY",
     ledger: data.map(({ p, repo, roadmap, commits }) => ({
       slug: p.slug, title: p.title, state: VERB[p.status], since: p.started, blurb: p.blurb, lines: p.lines,
       repo: p.repo, site: p.site,
