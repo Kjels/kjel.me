@@ -233,9 +233,10 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
     const hhs = String(hh).padStart(2, "0"), mms = String(mm).padStart(2, "0");
     if (!home) {
       clearNowHot(b); // the announcement lives on home only
-      // the strip, or the scrolled landing: a small clock on the top line, colon beating;
-      // dropped when the mark and the menu leave it no room (phones)
-      const row = current === "HOME" || current.startsWith("ENTRY:") ? 3 : Math.round((rows - 5) / 2);
+      // the scrolled landing and the entries keep their top line for the mark, the ticker and the menu
+      if (current === "HOME" || current.startsWith("ENTRY:")) { L.halo = null; return; }
+      // the strip: a small clock on the line, colon beating; dropped when the mark and the menu leave it no room
+      const row = Math.round((rows - 5) / 2);
       const w = measureM(hhs) + 2 + measureM(":") + 2 + measureM(mms);
       const navW = NAV.reduce((s, wd) => s + measureM(wd) + 6, 0) - 6;
       if (cols / 2 - w / 2 - 8 < 3 + measureM("KJEL.") || cols / 2 + w / 2 + 8 > cols - 3 - navW) { L.halo = null; return; }
@@ -311,6 +312,40 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
     "##...........##",
   ];
 
+  /* ---------- the wheel: a fixed gear under the flag. it turns while you scroll and not otherwise ---------- */
+  let wheel: Layer | null = null;
+  function updateWheel(b: Board) {
+    const L = (wheel ??= b.layer());
+    L.cold = true;
+    const { cols, rows, wide, chh } = b;
+    const on = current === "HOME" && wide && !b.life;
+    const off = () => { if (L.key !== "off") { L.key = "off"; L.mask.fill(0); } };
+    if (!on) return off();
+    const S = sectionRows(rows, cols, (live?.ledger ?? []).length);
+    const R = 13, cx = Math.round(cols * 0.94) - R - 1;
+    const cy = S.ABOUT + SECTION_PAD(true) - 4 + 30 + 10 + R - b.winRow; // under the flagpole
+    if (cy + R < 0 || cy - R >= rows) return off();
+    // it rolls along the page: one turn per circumference of scroll, forward as you go down
+    const theta = window.scrollY / (R * chh);
+    const step = Math.round(theta * R * 2);
+    const key = `${cy}|${step}`;
+    if (key === L.key) return;
+    L.key = key;
+    L.mask.fill(0);
+    const put = (x: number, y: number) => { const xi = Math.round(x), yi = Math.round(y); if (xi >= 0 && xi < cols && yi >= b.pinnedRows && yi < rows) L.mask[yi * cols + xi] = 1; };
+    // the rim
+    const n = Math.round(R * 7);
+    for (let a = 0; a < n; a++) { const th = (a / n) * Math.PI * 2; put(cx + Math.cos(th) * R, cy + Math.sin(th) * R); }
+    // four spokes and the hub, turning with the page. a valve stem on the rim gives the eye a mark to follow
+    for (let k = 0; k < 4; k++) {
+      const th = theta + (k * Math.PI) / 2;
+      for (let r = 2; r < R - 1; r += 0.7) put(cx + Math.cos(th) * r, cy + Math.sin(th) * r);
+    }
+    put(cx, cy); put(cx + 1, cy); put(cx, cy + 1); put(cx + 1, cy + 1);
+    const vt = theta + Math.PI / 4;
+    put(cx + Math.cos(vt) * (R + 1), cy + Math.sin(vt) * (R + 1)); put(cx + Math.cos(vt) * (R + 2), cy + Math.sin(vt) * (R + 2));
+  }
+
   /* ---------- the flag: a jolly roger fluttering beside the ABOUT title ---------- */
   let flag: Layer | null = null;
   function updateFlag(b: Board, t: number) {
@@ -331,7 +366,8 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
     if (key === L.key) return;
     L.key = key;
     L.mask.fill(0);
-    const put = (x: number, y: number) => { if (x >= 0 && x < cols && y >= 0 && y < rows) L.mask[y * cols + x] = 1; };
+    // never over the pinned band: the mark, the ticker and the menu live there
+    const put = (x: number, y: number) => { if (x >= 0 && x < cols && y >= b.pinnedRows && y < rows) L.mask[y * cols + x] = 1; };
     for (let r = 0; r < POLE; r++) put(px, y0 + r);
     put(px - 1, y0); put(px + 1, y0);
     // each column of the flag rides its own wave, still at the hoist, three rows at the fly
@@ -743,13 +779,11 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
     const previewOn = !!preview && preview.key !== "off" && preview.key !== "none";
     const on = current === "HOME" && !b.life && TICKER && !previewOn;
     if (!on) { if (L.key !== "off") { L.key = "off"; L.mask.fill(0); } return; }
-    // the span: right of the small mark when it is pinned (or from the gutter when it is not),
-    // up to the clock when the landing is scrolled, else up to the menu; on phones, to the edge
+    // the span: right of the small mark when it is pinned (or from the gutter when it is not), up to the menu; on phones, to the edge
     const scrolled = b.winRow > Math.round(rows * 0.3);
     const x0 = scrolled ? 3 + measureM("KJEL.") + 8 : 3;
     let x1: number;
     if (!wide) x1 = cols - 3;
-    else if (scrolled) { const d = new Date(), w = measureM(String(d.getHours()).padStart(2, "0")) + 2 + measureM(":") + 2 + measureM(String(d.getMinutes()).padStart(2, "0")); x1 = Math.round((cols - w) / 2) - 8; }
     else { const right = Math.round(cols * 0.94), navW = NAV.reduce((a, wd) => a + measureM(wd) + 6, 0) - 6; x1 = right - navW - 10; }
     const span = x1 - x0;
     if (span < 20) { if (L.key !== "off") { L.key = "off"; L.mask.fill(0); } return; }
@@ -877,6 +911,7 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
     updateTicker(b, t);
     updateFlip(b, t);
     updateFlag(b, t);
+    updateWheel(b);
     updateLife(b);
   }
 
