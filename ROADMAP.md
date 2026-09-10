@@ -40,7 +40,7 @@ Ordered by value. Checked items are done.
 - [x] **Landing.** Live line (what the ledger is building, last push), menu previews on hover, idle wave using the second portrait, now-playing in the strip
 - [x] **The landing scrolls.** A board taller than the screen: home, then WORK as a ledger, then ABOUT, all in dots, stepping a row at a time with dot state carried along so only the leading edge flips. Menu words scroll to sections. `?scroll=snap` for detents
 - [x] **Entries are boards.** Name, live lifeform, meta, one-liner, short lines, roadmap ticks, README / SITE / ALL WORK. `/work` and `/about` redirect into the landing. Links ripple on hover and press
-- [ ] Strip ticker: the latest commit message crawling across the pinned line
+- [x] Ticker on the pinned line, home and scrolled alike, one column at a time with no afterglow (`content/speech.ts`). Feeding it the latest commit message is a small next step
 - [ ] Arrow keys step the landing one row; space pages
 - [ ] 404 as a board
 - [x] **GAME OF LIFE.** The one coloured thing on the board: a green word with a glider lapping a 7×7 torus beside it. Opens a blank board: click or drag dots to seed, PLAY runs, PAUSE edits, CLEAR wipes, WHAT IS THIS opens a glass card (HTML over the board, the first of the kind), the word or Esc leaves

@@ -6,9 +6,10 @@
 
 import type { BoardText } from "@/lib/board-text";
 import { Board, type Layer, type LinkRec } from "../engine";
-import { DS, measureCols, measureM, wrap, wrapM, fit } from "../font";
+import { DS, glyphM, measureCols, measureM, wrap, wrapM, fit } from "../font";
 import { loadPortrait } from "../portrait";
 import { ABOUT_LINES, ABOUT_INTERESTS, ABOUT_INTERESTS_LABEL } from "@/content/about";
+import { TICKER } from "@/content/speech";
 
 /** one project, as the board shows it: a ledger line on the landing, a page of its own */
 export type Entry = {
@@ -620,6 +621,43 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
     b.haloOf(L);
   }
 
+  /* ---------- the ticker: a line crawling along the pinned band, a column at a time ---------- */
+  let ticker: Layer | null = null;
+  function updateTicker(b: Board, t: number) {
+    const L = (ticker ??= b.layer());
+    L.cold = true; // moving text: no afterglow trail
+    const { cols, rows, wide, reduced } = b;
+    const on = current === "HOME" && !b.life && TICKER;
+    if (!on) { if (L.key !== "off") { L.key = "off"; L.mask.fill(0); } return; }
+    // the span: right of the small mark when it is pinned (or from the gutter when it is not),
+    // up to the clock when the landing is scrolled, else up to the menu; on phones, to the edge
+    const scrolled = b.winRow > Math.round(rows * 0.3);
+    const x0 = scrolled ? 3 + measureM("KJEL.") + 8 : 3;
+    let x1: number;
+    if (!wide) x1 = cols - 3;
+    else if (scrolled) { const d = new Date(), w = measureM(String(d.getHours()).padStart(2, "0")) + 2 + measureM(":") + 2 + measureM(String(d.getMinutes()).padStart(2, "0")); x1 = Math.round((cols - w) / 2) - 8; }
+    else { const right = Math.round(cols * 0.94), navW = NAV.reduce((a, wd) => a + measureM(wd) + 6, 0) - 6; x1 = right - navW - 10; }
+    const span = x1 - x0;
+    if (span < 20) { if (L.key !== "off") { L.key = "off"; L.mask.fill(0); } return; }
+    const tw = measureM(TICKER);
+    // crawl at 14 columns a second; still, and cut to fit, under reduced motion
+    const off = reduced ? 0 : Math.floor(t * 14) % (tw + span);
+    const key = `${x0}|${x1}|${off}`;
+    if (key === L.key) return;
+    L.key = key;
+    L.mask.fill(0);
+    const text = reduced ? fit(TICKER, true, span) : TICKER;
+    let cx = reduced ? x0 : x1 - off;
+    for (const ch of text.toUpperCase()) {
+      const g = glyphM(ch), gw = g[0].length;
+      for (let r = 0; r < 5; r++) for (let c = 0; c < gw; c++) {
+        const xx = cx + c;
+        if (g[r][c] === "1" && xx >= x0 && xx < x1) L.mask[(3 + r) * cols + xx] = 1;
+      }
+      cx += gw + 1;
+    }
+  }
+
   /* ---------- the glider: a 7x7 torus beside the word, lapping forever ---------- */
   let gliderAt: { x: number; y: number } | null = null;
   let glider: Layer | null = null;
@@ -688,8 +726,8 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
     if (nk !== lifeNKey) {
       lifeNKey = nk;
       N.mask.fill(0);
-      // the note wraps short of the clock on the right
-      const lines = life!.running ? [nk] : wrapM("CLICK A DOT TO FLIP IT. DRAG TO PAINT. THEN PLAY.", Math.round(cols * 0.5) - colL);
+      // only the generation count while it runs; WHAT IS THIS covers the rest
+      const lines = life!.running ? [nk] : [];
       let ny = y - 2 - lines.length * 7;
       for (const line of lines) { b.stampInto(N.mask, line, colL, ny, 1, true); ny += 7; }
       b.haloOf(N);
@@ -712,6 +750,7 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
     updatePreview(b);
     updateMark(b);
     updateGlider(b, t);
+    updateTicker(b, t);
     updateLife(b);
   }
 
