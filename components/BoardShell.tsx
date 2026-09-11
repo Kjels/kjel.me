@@ -10,9 +10,11 @@ import { initAccent } from "./board/palette";
 import { createKjelScene, NAV, STRIP_ROWS, STRIP_H, ROUTES, SCREENS, entryLink, sectionFor, type Live } from "./board/scenes/kjel";
 
 type Mode = "full" | "strip";
-// the landing and the entries are boards; everything else (config) sits under the strip
-const modeFor = (path: string): Mode => (path === "/" || path.startsWith("/work/") ? "full" : "strip");
-const pageFor = (path: string) => (path === "/" ? "HOME" : path.startsWith("/work/") ? "ENTRY:" + path.split("/")[2] : "STRIP:" + sectionFor(path));
+// Only /config sits under the strip; the landing and the entries are boards. The default is the
+// board on purpose: a prerender without a pathname must not collapse the sign to a masthead.
+const modeFor = (path: string): Mode => (path.startsWith("/config") ? "strip" : "full");
+const pageFor = (path: string) =>
+  path.startsWith("/work/") ? "ENTRY:" + path.split("/")[2] : path.startsWith("/config") ? "STRIP:" + sectionFor(path) : "HOME";
 
 // One board for the whole site. On "/" it fills the viewport; on every other
 // route it is the masthead strip and the HTML content sits beneath it.
@@ -121,6 +123,9 @@ export function BoardShell({ text, live, children }: { text?: BoardText; live?: 
       },
     });
     boardRef.current = board;
+    // the server may have rendered the shell without knowing the route: take the real one now
+    const real = modeFor(location.pathname);
+    if (real !== modeRef.current) { modeRef.current = real; pathRef.current = location.pathname; setMode(real); }
     board.resize();
     scene.load(board);
     board.start();
