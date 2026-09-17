@@ -5,6 +5,7 @@ import { VisitPing } from "@/components/VisitPing";
 import { BoardShell } from "@/components/BoardShell";
 import { getBoardText } from "@/lib/board";
 import { PROJECTS, VERB } from "@/content/work";
+import { dotDate, posts } from "@/content/writing";
 import { fetchRepo, fetchRoadmap, fetchCommitCount, ago, gen } from "@/lib/github";
 import type { Live } from "@/components/board/scenes/kjel";
 
@@ -18,6 +19,8 @@ async function getLive(): Promise<Live> {
   for (const d of data) if (d.repo && d.repo.pushedAt > when) when = d.repo.pushedAt;
   return {
     pushed: when ? ago(when).toUpperCase() : "", entries: PROJECTS.length, place: "BROOKLYN, NY",
+    // every post: the landing shows the latest few, the index board shows them all
+    writing: posts().map((p) => ({ slug: p.slug, title: p.title, date: dotDate(p.date), full: p.date, lines: p.lines, minutes: p.minutes })),
     ledger: data.map(({ p, repo, roadmap, commits }) => ({
       slug: p.slug, title: p.title, state: VERB[p.status], since: p.started, blurb: p.blurb, lines: p.lines,
       repo: p.repo, site: p.site,

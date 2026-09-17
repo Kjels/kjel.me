@@ -1,7 +1,10 @@
 import type { MDXComponents } from "mdx/types";
+import { slugify } from "@/lib/writing";
 
-// content pages render plain semantic HTML; styling lives in globals.css under .prose
-const components: MDXComponents = {};
+// headings carry an anchor so the rail can point at them
+const components: MDXComponents = {
+  h2: ({ children }) => <h2 id={typeof children === "string" ? slugify(children) : undefined}>{children}</h2>,
+};
 
 export function useMDXComponents(): MDXComponents {
   return components;

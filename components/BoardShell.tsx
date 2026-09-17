@@ -10,11 +10,19 @@ import { initAccent } from "./board/palette";
 import { createKjelScene, NAV, STRIP_ROWS, STRIP_H, ROUTES, SCREENS, entryLink, sectionFor, type Live } from "./board/scenes/kjel";
 
 type Mode = "full" | "strip";
-// Only /config sits under the strip; the landing and the entries are boards. The default is the
-// board on purpose: a prerender without a pathname must not collapse the sign to a masthead.
-const modeFor = (path: string): Mode => (path.startsWith("/config") ? "strip" : "full");
+// /config and everything under /writing sit beneath the strip; the landing and the entries are
+// boards. Essays are the one thing dots cannot set, so they get real type under the masthead.
+// The default is the board on purpose: a prerender without a pathname must not collapse the
+// sign to a masthead.
+// An essay is the only thing dots cannot set, so /writing/<slug> and /config are the only HTML.
+// Both indexes are boards: a list of titles is what a departures board is for.
+const modeFor = (path: string): Mode =>
+  path.startsWith("/config") || /^\/writing\/.+/.test(path) ? "strip" : "full";
 const pageFor = (path: string) =>
-  path.startsWith("/work/") ? "ENTRY:" + path.split("/")[2] : path.startsWith("/config") ? "STRIP:" + sectionFor(path) : "HOME";
+  path.startsWith("/work/") ? "ENTRY:" + path.split("/")[2]
+    : path === "/work" ? "INDEX:work"
+    : path === "/writing" ? "INDEX:writing"
+    : modeFor(path) === "strip" ? "STRIP:" + sectionFor(path) : "HOME";
 
 // One board for the whole site. On "/" it fills the viewport; on every other
 // route it is the masthead strip and the HTML content sits beneath it.
@@ -73,6 +81,7 @@ export function BoardShell({ text, live, children }: { text?: BoardText; live?: 
     const scene = createKjelScene(textRef.current || BOARD_DEFAULTS, liveRef.current);
     const routes: Record<string, string> = { ...ROUTES };
     for (const e of liveRef.current?.ledger ?? []) routes[entryLink(e.slug)] = `/work/${e.slug}`;
+    for (const n of liveRef.current?.writing ?? []) routes["NOTE:" + n.slug] = `/writing/${n.slug}`;
     const board = new Board({
       canvas: canvasRef.current!,
       hots: hotsRef.current!,
@@ -94,6 +103,8 @@ export function BoardShell({ text, live, children }: { text?: BoardText; live?: 
         const path = pathRef.current;
         if (path === "/") return scene.height(rows, cols);
         if (path.startsWith("/work/")) return scene.entryHeight(rows, cols, path.split("/")[2]);
+        if (path === "/work") return scene.indexHeight(rows, cols, "work");
+        if (path === "/writing") return scene.indexHeight(rows, cols, "writing");
         return rows;
       },
       scrollOffset: () => window.scrollY,
@@ -113,7 +124,7 @@ export function BoardShell({ text, live, children }: { text?: BoardText; live?: 
         // on the landing, WORK and ABOUT are sections of the board: scroll to them
         if (pathRef.current === "/") {
           const S = scene.sections(board.rows, board.cols);
-          const row = path === "/" ? S.HOME : path === "/work" ? S.WORK : path === "/about" ? S.ABOUT : -1;
+          const row = path === "/" ? S.HOME : path === "/#work" ? S.WORK : path === "/#writing" ? S.WRITING : path === "/about" ? S.ABOUT : -1;
           if (row >= 0) { window.scrollTo({ top: row * board.chh, behavior: board.reduced ? "auto" : "smooth" }); return; }
         }
         if (path === pathRef.current) return;

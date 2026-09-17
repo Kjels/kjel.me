@@ -17,15 +17,17 @@ export type Entry = {
   repo?: string; site?: string; gen?: string | null; pushed?: string | null; roadmap?: { done: number; total: number } | null;
 };
 /** what the ledger knows right now, for the landing's live line, menu previews and the in-board ledger */
-export type Live = { pushed: string; entries: number; place: string; ledger: Entry[] };
+/** one post, as the board shows it: a departures line on the landing, an HTML page to read */
+export type Note = { slug: string; title: string; date: string; full: string; lines: string[]; minutes: number };
+export type Live = { pushed: string; entries: number; place: string; ledger: Entry[]; writing?: Note[] };
 
-/** the landing is three sections tall: home, work, about. home and work are a screen each; about takes what it needs */
-export const SCREENS = 3;
+/** the landing is four sections tall: home, work, writing, about. each takes what it needs, at least a screen */
+export const SCREENS = 4;
 /** the section a menu word scrolls to, in screens */
-export const SECTION: Record<string, number> = { HOME: 0, WORK: 1, ABOUT: 2 };
+export const SECTION: Record<string, number> = { HOME: 0, WORK: 1, WRITING: 2, ABOUT: 3 };
 /** the ledger is tiles: one full-width box per project, all the same shape */
 // the ledger is a departures board: one row per project between dotted hairlines, columns aligned down the board
-const ROW_H = 32, ROW_H_NARROW = 48, TILE_GAP = 0, WORK_HEAD = 14 + 28 + 12;
+const ROW_H = 22, ROW_H_NARROW = 34, TILE_GAP = 0, WORK_HEAD = 14 + 28 + 12;
 /** rows from a section's start to its title: clear of the pinned band on narrow boards */
 const SECTION_PAD = (wide: boolean) => (wide ? 14 : 26);
 function tileGrid(rows: number, cols: number, n: number) {
@@ -36,20 +38,67 @@ function tileGrid(rows: number, cols: number, n: number) {
   const th = wide ? ROW_H : ROW_H_NARROW;
   const top = rows + (wide ? WORK_HEAD : SECTION_PAD(false) + 14 + 12);
   const tiles = Array.from({ length: n }, (_, i) => ({ x: colL + (i % per) * (tw + TILE_GAP), y: top + Math.floor(i / per) * (th + TILE_GAP), w: tw, h: th }));
-  return { tiles, end: top + Math.ceil(n / per) * (th + TILE_GAP) + 12, wide };
+  return { tiles, end: top + Math.ceil(n / per) * (th + TILE_GAP) + 12 + 7 + 14, wide };
 }
-/** where each section starts, in rows, for a board of this shape with n entries */
-export function sectionRows(rows: number, cols: number, n: number) {
+/** the writing section: a head, then one departures line per post, then the way to the archive */
+const NOTE_H = 12;
+/** a phone sets the title over as many lines as it needs, so every row is measured, not assumed */
+function noteHeight(n: Note, width: number) {
+  return 4 + 8 + wrap(n.title.toUpperCase(), 1, width).length * 9 + 4;
+}
+export function writingGrid(rows: number, cols: number, start: number, ns: Note[]) {
+  const wide = cols / rows > 1.05;
+  const colL = wide ? Math.round(cols * 0.06) : 3, right = wide ? Math.round(cols * 0.94) : cols - 3;
+  const top = start + (wide ? WORK_HEAD : SECTION_PAD(false) + 14 + 12);
+  const rowsOut: { x: number; y: number; w: number; h: number }[] = [];
+  let y = top;
+  for (const n of ns) {
+    const h = wide ? NOTE_H : noteHeight(n, right - colL);
+    rowsOut.push({ x: colL, y, w: right - colL, h });
+    y += h;
+  }
+  // the foot: the rule under the last line, then ALL WRITING, then air
+  return { rows: rowsOut, end: y + 12 + 7 + 14, wide, colL, right };
+}
+/** where each section starts, in rows, for a board of this shape */
+export function sectionRows(rows: number, cols: number, n: number, ns: Note[] = []) {
   const g = tileGrid(rows, cols, n);
-  return { HOME: 0, WORK: rows, ABOUT: rows + Math.max(rows, g.end - rows) };
+  const WRITING = rows + Math.max(rows, g.end - rows);
+  if (!ns.length) return { HOME: 0, WORK: rows, WRITING, ABOUT: WRITING };
+  const w = writingGrid(rows, cols, WRITING, ns);
+  return { HOME: 0, WORK: rows, WRITING, ABOUT: WRITING + Math.max(rows, w.end - WRITING) };
 }
+/** where the metadata block starts, shared by every row so the columns line up down the board */
+function metaColumn(entries: Entry[], rr: number) {
+  let stateW = 0, sinceW = 0;
+  for (const e of entries) {
+    stateW = Math.max(stateW, measureM(e.state));
+    sinceW = Math.max(sinceW, measureM("SINCE " + e.since));
+  }
+  return { msgX: rr - (stateW + 8 + sinceW), sinceW };
+}
+
 /** route name for an entry link on the board */
 export const entryLink = (slug: string) => "ENTRY:" + slug;
+
+/** the largest scale a section word can take without running past the right margin */
+const headScale = (word: string, sc: number, room: number) => (measureCols(word) * sc * 2 <= room ? sc * 2 : sc);
 
 const aboutMeasure = (cols: number, wide: boolean) => (wide ? Math.round(cols * 0.88) : cols - 6); // the full width between the gutters
 /** about reads at double size on wide boards; single on phones, where double would fit five letters a line */
 const aboutScale = (wide: boolean) => (wide ? 2 : 1);
 /** rows the about section needs: title, lines, the interests, links, air */
+const ABOUT_LINKS = ["EMAIL", "GITHUB", "LINKEDIN"];
+/** how many lines the links take at this measure, so the section's height is never short */
+function aboutLinkLines(measure: number) {
+  let lines = 1, lx = 0;
+  for (const w of ABOUT_LINKS) {
+    if (lx > 0 && lx + measureM(w) > measure) { lines++; lx = 0; }
+    lx += measureM(w) + 8;
+  }
+  return lines;
+}
+
 function aboutRows(cols: number, wide: boolean) {
   const sc = aboutScale(wide), lh = sc * 7 + (sc > 1 ? 4 : 2), m = aboutMeasure(cols, wide);
   let n = SECTION_PAD(wide) + 28 + 8;
@@ -57,12 +106,20 @@ function aboutRows(cols: number, wide: boolean) {
   for (const para of ABOUT_LINES) n += wrap(para, sc, m).length * lh + 4;
   n += 8 + wrap(ABOUT_INTERESTS_LABEL, 1, m).length * 9 + 1; // the label
   n += wrap(ABOUT_INTERESTS.join(" / "), 1, m).length * 9;
-  return n + 12 + 7 + 12 + Math.round((wide ? 13 : 11) * 1.18) + 14; // the links, then the apple, then air
+  n += 12 + aboutLinkLines(m) * 8; // the links
+  return n + 12 + Math.round((wide ? 13 : 11) * 1.18) + 14; // then the apple, then air
 }
 
 /** the sections, in menu order; each is an HTML route */
-export const NAV = ["WORK", "ABOUT"];
-export const ROUTES: Record<string, string> = { HOME: "/", WORK: "/work", ABOUT: "/about" };
+export const NAV = ["WORK", "WRITING", "ABOUT"];
+// A phone board is 71 columns. WORK + WRITING + ABOUT in the micro face needs 61 of them before
+// gaps, which leaves the words touching. Writing keeps its section heading and its place in the
+// scroll; it gives up the pinned menu, the way the clock and the ticker already do down there.
+export const navWords = (wide: boolean, writing = true) =>
+  NAV.filter((w) => w !== "WRITING" || (wide && writing));
+// WRITING is a section of the landing, so the menu word carries the hash; ARCHIVE is the HTML
+// index behind it, the one link that must navigate rather than scroll.
+export const ROUTES: Record<string, string> = { HOME: "/", WORK: "/#work", WRITING: "/#writing", ABOUT: "/about", ARCHIVE: "/writing", LEDGER: "/work" };
 /** the masthead: grid height in dots and CSS height in px (keep --strip-h in globals.css equal) */
 export const STRIP_ROWS = 11;
 export const STRIP_H = 60;
@@ -70,6 +127,9 @@ export const STRIP_H = 60;
 /** which menu word a pathname belongs to, "" for none */
 export function sectionFor(path: string) {
   const seg = "/" + (path.split("/")[1] || "");
+  if (seg === "/writing") return "WRITING"; // the archive and every post sit under the menu word
+  if (seg === "/work") return "WORK";
+
   for (const [name, route] of Object.entries(ROUTES)) if (route !== "/" && route === seg) return name;
   return "";
 }
@@ -80,9 +140,21 @@ const MONTHS = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "
 // pupil positions as fractions of the portrait frame
 const EYES: [number, number][] = [[0.386, 0.276], [0.55, 0.274]];
 
+/** the board carries the latest few; the whole timetable is the HTML archive */
+export const BOARD_NOTES = 5;
+/** and the same for the ledger: the rest of the work is at /work */
+export const BOARD_ENTRIES = 5;
+
 export function createKjelScene(TXT: BoardText, live?: Live) {
+  const notes = () => (live?.writing ?? []).slice(0, BOARD_NOTES);
+  const shown = () => (live?.ledger ?? []).slice(0, BOARD_ENTRIES);
+  const hasWriting = () => !!(live?.writing ?? []).length;
   const ROLES = TXT.roles; // sequential, never random: a first visit reads the sane ones first
-  const external: Record<string, string> = { EMAIL: "mailto:hello@kjel.me", GITHUB: "https://github.com/Kjels" };
+  const external: Record<string, string> = {
+    EMAIL: "mailto:hello@kjel.me",
+    GITHUB: "https://github.com/Kjels",
+    LINKEDIN: "https://www.linkedin.com/in/kjelschlemmer",
+  };
   let pins: Layer | null = null; // the pinned top line on the tall landing
 
   let portrait: HTMLCanvasElement | null = null;
@@ -221,7 +293,7 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
     const { cols, rows, wide, reduced } = b;
     // Life clears the board: no clock, no role, no date
     if (b.life) { if (L.key !== "life") { L.key = "life"; L.mask.fill(0); L.halo = null; clearNowHot(b); } return; }
-    const scrolled = b.winRow > Math.round(rows * 0.3) || current.startsWith("ENTRY:");
+    const scrolled = b.winRow > Math.round(rows * 0.3) || current.startsWith("ENTRY:") || current.startsWith("INDEX:");
     const home = current === "HOME" && !scrolled;
     const fi = reduced ? 0 : Math.floor(t / 2.8) % ROLES.length;
     const key = current + "|" + (scrolled ? "s" : "h") + "|" + ((Date.now() / 1000) | 0) + "|" + fi + "|" + nowTitle;
@@ -234,11 +306,11 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
     if (!home) {
       clearNowHot(b); // the announcement lives on home only
       // the scrolled landing and the entries keep their top line for the mark, the ticker and the menu
-      if (current === "HOME" || current.startsWith("ENTRY:")) { L.halo = null; return; }
+      if (current === "HOME" || current.startsWith("ENTRY:") || current.startsWith("INDEX:")) { L.halo = null; return; }
       // the strip: a small clock on the line, colon beating; dropped when the mark and the menu leave it no room
       const row = Math.round((rows - 5) / 2);
       const w = measureM(hhs) + 2 + measureM(":") + 2 + measureM(mms);
-      const navW = NAV.reduce((s, wd) => s + measureM(wd) + 6, 0) - 6;
+      const navW = navWords(b.wide, hasWriting()).reduce((s, wd) => s + measureM(wd) + 6, 0) - 6;
       if (cols / 2 - w / 2 - 8 < 3 + measureM("KJEL.") || cols / 2 + w / 2 + 8 > cols - 3 - navW) { L.halo = null; return; }
       let x = Math.round((cols - w) / 2);
       b.stampInto(L.mask, hhs, x, row, 1, true); x += measureM(hhs) + 2;
@@ -322,7 +394,7 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
     const off = () => { if (L.key !== "off") { L.key = "off"; L.mask.fill(0); } };
     if (!on) return off();
     // the top-right of the about section, beside the title, in board rows; then into the window
-    const S = sectionRows(rows, cols, (live?.ledger ?? []).length);
+    const S = sectionRows(rows, cols, (live?.ledger ?? []).length, notes());
     const y0 = S.ABOUT + SECTION_PAD(true) - 4 - b.winRow;
     const FH = 20, FW = 36, POLE = 30;
     if (y0 + POLE < 0 || y0 >= rows) return off();
@@ -461,15 +533,14 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
     {
       const right = wide ? Math.round(cols * 0.94) : cols - 3;
       const gap = 6;
-      const total = NAV.reduce((s, w) => s + measureM(w) + gap, 0) - gap;
+      const total = navWords(b.wide, hasWriting()).reduce((s, w) => s + measureM(w) + gap, 0) - gap;
       let nx = wide ? right - total : 3;
       const ny = wide ? 3 : 13;
-      for (const wd of NAV) { b.pinLink(P, wd, nx, ny, true, wd); nx += measureM(wd) + gap; }
+      for (const wd of navWords(b.wide, hasWriting())) { b.pinLink(P, wd, nx, ny, true, wd); nx += measureM(wd) + gap; }
       bandHalo(b, P, ny + 8);
     }
     if (wide) {
       const colL = Math.round(cols * 0.06);
-      const right = Math.round(cols * 0.94);
       const cap = Math.min(H * 0.26, (W * 0.5) / 2.9);
       b.drawMark(cap, colL * cw, H * 0.4);
       if (portrait) {
@@ -524,6 +595,138 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
     if (b.vrows > rows) composeBelow(b);
   }
 
+  /* ---------- an index: the whole ledger, or the whole timetable, in dots ----------
+     Dots cannot set an essay. They set a list of titles better than type does, which is the one
+     thing a departures board exists to do, so neither index is HTML. Same row grammar as the
+     landing, uncapped, grouped by year where there are years. */
+
+  type IndexRow = { kind: "row"; y: number; h: number; i: number } | { kind: "group"; y: number; label: string };
+
+  /** the rows of an index, measured before a dot is stamped. A phone wraps a title over as many
+   *  lines as it needs, and the pinned band is 22 rows deep down there, so nothing is assumed. */
+  function indexLayout(rows: number, cols: number, kind: string) {
+    const wide = cols / rows > 1.05;
+    const colL = wide ? Math.round(cols * 0.06) : 3, right = wide ? Math.round(cols * 0.94) : cols - 3;
+    const sc = wide ? 2 : 1;
+    const pad = SECTION_PAD(wide); // clear of the pinned band, which is deeper on a phone
+    const head = pad + sc * 14 + 10 + 8 + 16;
+    const width = right - colL;
+    const out: IndexRow[] = [];
+    let y = head, i = 0, year = "";
+    if (kind === "writing") {
+      for (const n of live?.writing ?? []) {
+        const yr = n.full.slice(0, 4);
+        if (yr !== year) { y += 10; out.push({ kind: "group", y, label: yr }); y += 12; year = yr; }
+        const h = wide ? 14 : 5 + 3 + wrap(n.title.toUpperCase(), 1, width).length * 9 + 6;
+        out.push({ kind: "row", y, h, i: i++ });
+        y += h;
+      }
+    } else {
+      for (let k = 0; k < (live?.ledger ?? []).length; k++) {
+        const h = wide ? 22 : 21;
+        out.push({ kind: "row", y, h, i: i++ });
+        y += h;
+      }
+    }
+    return { out, end: y + 18, colL, right, wide, pad, sc };
+  }
+
+  function indexHeight(rows: number, cols: number, kind: string) {
+    return Math.max(rows, indexLayout(rows, cols, kind).end);
+  }
+
+  function composeIndex(b: Board, kind: string) {
+    const { cols, rows, wide } = b;
+    const P = (pins ??= b.layer());
+    P.mask.fill(0); P.key = "pins";
+    b.extraLinks = b.extraLinks.filter((l) => !l.page.startsWith("PIN:"));
+    b.pinnedRows = wide ? 12 : 22;
+    {
+      const right = wide ? Math.round(cols * 0.94) : cols - 3, gap = 6;
+      const total = navWords(b.wide, hasWriting()).reduce((s, w) => s + measureM(w) + gap, 0) - gap;
+      let nx = wide ? right - total : 3; const ny = wide ? 3 : 13;
+      b.pinLink(P, "KJEL.", 3, 3, true, "HOME");
+      for (const wd of navWords(b.wide, hasWriting())) { b.pinLink(P, wd, nx, ny, true, wd); nx += measureM(wd) + gap; }
+      bandHalo(b, P, b.pinnedRows);
+    }
+
+    const L = indexLayout(rows, cols, kind);
+    const { colL, right: rr, pad, sc } = L;
+    const word = kind === "writing" ? "WRITING" : "WORK";
+    const rule = (ry: number) => { for (let x = colL; x < rr; x += 2) b.block(x, ry, 1, 1); };
+
+    b.stamp(word, colL, pad, headScale(word, sc, rr - colL), undefined, false, true);
+    const n = kind === "writing" ? (live?.writing ?? []).length : (live?.ledger ?? []).length;
+    b.stamp(kind === "writing" ? `${n} PIECES` : `${n} ENTRIES`, colL, pad + sc * 14 + 10, 1, undefined, true);
+
+    ledgerRows = [];
+    let prev: IndexRow | null = null;
+    for (const r of L.out) {
+      if (r.kind === "group") { b.stamp(r.label, colL, r.y, 1, undefined, true); prev = null; continue; }
+      if (prev) rule(r.y - 4);
+      prev = r;
+      if (kind === "writing") indexNote(b, (live?.writing ?? [])[r.i], r.y, colL, rr, wide);
+      else indexEntry(b, (live?.ledger ?? [])[r.i], r.i, r.y, colL, rr, wide, r.h);
+    }
+    if (prev) rule(prev.y + prev.h - 4);
+  }
+
+  function indexNote(b: Board, n: Note, y: number, colL: number, rr: number, wide: boolean) {
+    if (!n) return;
+    const mins = n.minutes + " MIN", minsW = measureM(mins);
+    if (wide) {
+      const nx = colL + measureM(n.date) + 8;
+      b.stamp(n.date, colL, y + 1, 1, undefined, true);
+      b.stamp(fit(n.title.toUpperCase(), false, rr - nx - minsW - 12), nx, y, 1, "NOTE:" + n.slug);
+      b.stamp(mins, rr - minsW, y + 1, 1, undefined, true);
+    } else {
+      b.stamp(n.date + "  " + mins, colL, y, 1, undefined, true);
+      let ly = y + 8;
+      for (const line of wrap(n.title.toUpperCase(), 1, rr - colL)) { b.stamp(line, colL, ly, 1, "NOTE:" + n.slug); ly += 9; }
+    }
+    const rec = b.links[b.links.length - 1];
+    const h = wide ? 14 : 5 + 3 + wrap(n.title.toUpperCase(), 1, rr - colL).length * 9 + 6;
+    const hot = b.hotAt(colL * b.cw, (y - 3) * b.chh, (rr - colL) * b.cw, h * b.chh, n.title.toLowerCase(), () => b.route(`/writing/${n.slug}`), `/writing/${n.slug}`);
+    hot.addEventListener("mouseenter", () => { if (rec) { rec.hover = true; rec.since = performance.now() / 1000; } });
+    hot.addEventListener("mouseleave", () => { if (rec) rec.hover = false; });
+  }
+
+  function indexEntry(b: Board, e: Entry, i: number, y: number, colL: number, rr: number, wide: boolean, rowH: number) {
+    if (!e) return;
+    const no = String(i + 1).padStart(2, "0");
+    if (wide) {
+      const nx = colL + measureM(no) + 8, mid = y + 5;
+      const M = metaColumn(live?.ledger ?? [], rr);
+      const stateW = measureM(e.state);
+      // the name is what the row is for: if the columns would squeeze it, the state goes first
+      const stateX = rr - M.sinceW - 8 - stateW;
+      const keepState = nx + measureCols(e.title) * 2 + 8 <= stateX;
+      b.stamp(no, colL, mid, 1, undefined, true);
+      b.stamp("SINCE " + e.since, rr - M.sinceW, mid, 1, undefined, true);
+      if (keepState) {
+        b.stamp(e.state, stateX, mid, 1, undefined, true);
+        if (e.state === "LIVE") b.tint(stateX, mid, stateX + stateW, mid + 5, (t, x) => b.lifeColor(t, x));
+      }
+      const name = fit(e.title.toUpperCase(), false, Math.floor(((keepState ? stateX : rr - M.sinceW) - 8 - nx) / 2));
+      b.stamp(name, nx, y, 2, entryLink(e.slug));
+      const lx = nx + measureCols(name) * 2 + 10;
+      ledgerRows.push({ x: lx, y: mid, w: rr - lx, right: true, lines: e.lines.map((l) => l.toUpperCase()), hover: 0 });
+    } else {
+      const nx = colL + measureM(no) + 6;
+      b.stamp(no, colL, y + 1, 1, undefined, true);
+      b.stamp(e.title.toUpperCase(), nx, y, 1, entryLink(e.slug));
+      b.stamp(e.state, colL, y + 10, 1, undefined, true);
+      if (e.state === "LIVE") b.tint(colL, y + 10, colL + measureM(e.state), y + 15, (t, x) => b.lifeColor(t, x));
+      const sinceW = measureM("SINCE " + e.since);
+      b.stamp("SINCE " + e.since, rr - sinceW, y + 10, 1, undefined, true);
+    }
+    const rec = b.links[b.links.length - 1];
+    const row = wide ? ledgerRows[ledgerRows.length - 1] : undefined;
+    const hot = b.hotAt(colL * b.cw, (y - 3) * b.chh, (rr - colL) * b.cw, rowH * b.chh, e.title.toLowerCase(), () => b.route(`/work/${e.slug}`), `/work/${e.slug}`);
+    hot.addEventListener("mouseenter", () => { const now = performance.now() / 1000; if (rec) { rec.hover = true; rec.since = now; } if (row) row.hover = now; });
+    hot.addEventListener("mouseleave", () => { if (rec) rec.hover = false; if (row) row.hover = 0; });
+  }
+
   /** the pinned line's halo is a whole band: rows 0..to are cleared of whatever scrolls beneath */
   function bandHalo(b: Board, L: Layer, to: number) {
     b.haloOf(L);
@@ -535,46 +738,53 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
   function composeBelow(b: Board) {
     const { cols, rows, wide } = b;
     const colL = wide ? Math.round(cols * 0.06) : 3;
-    const right = wide ? Math.round(cols * 0.94) : cols - 3;
     const sc = wide ? 2 : 1;
 
-    const S = sectionRows(rows, cols, (live?.ledger ?? []).length);
-    // WORK
+    const S = sectionRows(rows, cols, shown().length, notes());
+    // WORK: one departures line per project. The blurb does not rest on the board; the schedule
+    // columns turn over into it on hover, the way a split-flap posts a service message in place
+    // of the times. That halves the row and keeps the name the only large thing on it.
     let y = S.WORK + SECTION_PAD(wide);
     b.stamp("WORK", colL, y, sc * 2, undefined, false, true);
-    const entries = live?.ledger ?? [];
+    const entries = shown();
     const G = tileGrid(rows, cols, entries.length);
     const rr = wide ? Math.round(cols * 0.94) : cols - 3;
     const rule = (ry: number) => { for (let x = colL; x < rr; x += 2) b.block(x, ry, 1, 1); };
+    const M = metaColumn(entries, rr);
     ledgerRows = [];
     entries.forEach((e, i) => {
       const t = G.tiles[i];
       if (i) rule(t.y); // the title's own rule serves the first row
       const no = String(i + 1).padStart(2, "0");
       if (wide) {
-        // index small at the margin, the name the only large thing, the line beneath it; state and date at the rr
-        const ny = t.y + 7, nx = colL + measureM(no) + 8;
-        b.stamp(no, colL, ny + 2, 1, undefined, true);
-        b.stamp(e.title.toUpperCase(), nx, ny, 2, entryLink(e.slug));
-        const ly = ny + 14 + 4;
-        const sinceW = measureM("SINCE " + e.since), stateW = measureM(e.state);
-        const lineMax = rr - Math.max(sinceW, stateW) - 12 - nx;
-        b.stamp(fit((e.lines[0] || e.blurb).toUpperCase(), true, lineMax), nx, ly, 1, undefined, true);
-        b.stamp(e.state, rr - stateW, ny + 2, 1, undefined, true);
-        if (e.state === "LIVE") b.tint(rr - stateW, ny + 2, rr, ny + 7, (t, x) => b.lifeColor(t, x));
-        b.stamp("SINCE " + e.since, rr - sinceW, ly, 1, undefined, true);
-        ledgerRows.push({ x: nx, y: ly, w: lineMax, lines: e.lines.map((l) => l.toUpperCase()), hover: 0 });
+        const ny = t.y + 3, nx = colL + measureM(no) + 8;
+        const mid = ny + 5; // the micro columns sit on the middle of the fourteen-row name
+        b.stamp(no, colL, mid, 1, undefined, true);
+        // the columns are placed first: the name takes the room that is left, never the column's
+        const stateW = measureM(e.state);
+        const stateX = rr - M.sinceW - 8 - stateW;
+        const keepState = nx + measureCols(e.title) * 2 + 8 <= stateX;
+        b.stamp("SINCE " + e.since, rr - M.sinceW, mid, 1, undefined, true);
+        if (keepState) {
+          b.stamp(e.state, stateX, mid, 1, undefined, true);
+          if (e.state === "LIVE") b.tint(stateX, mid, stateX + stateW, mid + 5, (t, x) => b.lifeColor(t, x));
+        }
+        const name = fit(e.title.toUpperCase(), false, Math.floor(((keepState ? stateX : rr - M.sinceW) - 8 - nx) / 2));
+        b.stamp(name, nx, ny, 2, entryLink(e.slug));
+        // On hover the metadata gives up its room to the line. The line is set to the right margin,
+        // so its edge lands exactly where SINCE ends on every other row: the column the eye is
+        // already following. Left-aligning it made it start in a different place on every row.
+        const lx = nx + measureCols(name) * 2 + 10;
+        ledgerRows.push({ x: lx, y: mid, w: rr - lx, right: true, lines: e.lines.map((l) => l.toUpperCase()), hover: 0 });
       } else {
-        const ny = t.y + 6, nx = colL + measureM(no) + 6;
+        const ny = t.y + 4, nx = colL + measureM(no) + 6;
         b.stamp(no, colL, ny + 1, 1, undefined, true);
         b.stamp(e.title.toUpperCase(), nx, ny, 1, entryLink(e.slug));
-        // the small text runs from the margin on a phone: the width is too dear to indent
-        let ly = ny + 10;
-        for (const line of wrapM((e.lines[0] || e.blurb).toUpperCase(), rr - colL).slice(0, 2)) { b.stamp(line, colL, ly, 1, undefined, true); ly += 7; }
-        ly += 2;
+        const ly = ny + 10;
         b.stamp(e.state, colL, ly, 1, undefined, true);
         if (e.state === "LIVE") b.tint(colL, ly, colL + measureM(e.state), ly + 5, (t, x) => b.lifeColor(t, x));
-        b.stamp("SINCE " + e.since, colL, ly + 7, 1, undefined, true);
+        const sinceW = measureM("SINCE " + e.since);
+        b.stamp("SINCE " + e.since, rr - sinceW, ly, 1, undefined, true);
       }
       const nameRec = b.links[b.links.length - 1];
       const row = ledgerRows[i];
@@ -583,8 +793,49 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
       hot.addEventListener("mouseenter", () => { const now = performance.now() / 1000; if (nameRec) { nameRec.hover = true; nameRec.since = now; } if (row) row.hover = now; });
       hot.addEventListener("mouseleave", () => { if (nameRec) nameRec.hover = false; if (row) row.hover = 0; });
     });
-    if (entries.length) rule(G.tiles[entries.length - 1].y + G.tiles[0].h);
+    if (entries.length) {
+      rule(G.tiles[entries.length - 1].y + G.tiles[0].h);
+      const total = (live?.ledger ?? []).length;
+      if (total > entries.length) b.stamp("ALL WORK", colL, G.tiles[entries.length - 1].y + G.tiles[0].h + 12, 1, "LEDGER", true, true);
+    }
     y = G.end;
+
+    // WRITING: the same departures lines, dated instead of numbered. The board carries the
+    // latest few; ALL WRITING goes to the archive, which is HTML, because dots cannot set an essay.
+    const ns = notes();
+    if (ns.length) {
+    y = S.WRITING + SECTION_PAD(wide);
+    b.stamp("WRITING", colL, y, headScale("WRITING", sc, rr - colL), undefined, false, true);
+    const W = writingGrid(rows, cols, S.WRITING, ns);
+    ns.forEach((n, i) => {
+      const t = W.rows[i];
+      if (i) rule(t.y);
+      const mins = n.minutes + " MIN";
+      if (wide) {
+        // one line: date at the margin, title, minutes at the rr. The lines live in the archive,
+        // which is where all three of them can stand at once.
+        const ny = t.y + 3, nx = colL + measureM(n.date) + 8;
+        const minsW = measureM(mins);
+        b.stamp(n.date, colL, ny + 1, 1, undefined, true);
+        b.stamp(fit(n.title.toUpperCase(), false, rr - nx - minsW - 12), nx, ny, 1, "NOTE:" + n.slug);
+        b.stamp(mins, rr - minsW, ny + 1, 1, undefined, true);
+      } else {
+        const ny = t.y + 4, nx = colL;
+        b.stamp(n.date + "  " + mins, colL, ny, 1, undefined, true);
+        let ly = ny + 8;
+        for (const line of wrap(n.title.toUpperCase(), 1, rr - colL)) { b.stamp(line, nx, ly, 1, "NOTE:" + n.slug); ly += 9; }
+      }
+      const nameRec = b.links[b.links.length - 1];
+      const hot = b.hotAt(colL * b.cw, t.y * b.chh, (rr - colL) * b.cw, t.h * b.chh, n.title.toLowerCase(), () => b.route(`/writing/${n.slug}`), `/writing/${n.slug}`);
+      hot.addEventListener("mouseenter", () => { if (nameRec) { nameRec.hover = true; nameRec.since = performance.now() / 1000; } });
+      hot.addEventListener("mouseleave", () => { if (nameRec) nameRec.hover = false; });
+    });
+    if (ns.length) {
+      rule(W.rows[ns.length - 1].y + W.rows[0].h);
+      const fy = W.rows[ns.length - 1].y + W.rows[0].h + 12;
+      b.stamp("ALL WRITING", colL, fy, 1, "ARCHIVE", true, true);
+    }
+    }
 
     // ABOUT: plain lines, then the interests with the strike as the bullet
     y = S.ABOUT + SECTION_PAD(wide);
@@ -605,8 +856,15 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
     for (const line of wrap(ABOUT_INTERESTS.join(" / "), 1, measure)) { b.stamp(line, colL, y, 1); y += 9; }
     y += 12;
     b.stamp(live?.place || "BROOKLYN, NY", colL, y, 1); y += 10;
-    b.stamp("EMAIL", colL, y, 1, "EMAIL", true, true);
-    b.stamp("GITHUB", colL + measureM("EMAIL") + 8, y, 1, "GITHUB", true, true);
+    // the links run along one line, and wrap to the next rather than off the right margin
+    {
+      let lx = colL;
+      for (const w of ABOUT_LINKS) {
+        if (lx > colL && lx + measureM(w) > colL + measure) { lx = colL; y += 8; }
+        b.stamp(w, lx, y, 1, w, true, true);
+        lx += measureM(w) + 8;
+      }
+    }
     // the last thing on the page
     const aw = wide ? 13 : 11;
     stampApple(b, (wide ? Math.round(cols * 0.94) : cols - 3) - aw, y + 12, aw);
@@ -618,9 +876,16 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
     const row = Math.round((rows - 5) / 2);
     b.stamp("KJEL.", 3, row, 1, "HOME", true);
     const gap = 6;
-    const total = NAV.reduce((s, w) => s + measureM(w) + gap, 0) - gap;
+    // the strip is eleven rows of a phone's width: it drops menu words rather than let them
+    // run into the mark. b.wide is no guide here, only what actually fits beside KJEL.
+    const span = (ws: string[]) => ws.reduce((s, w) => s + measureM(w) + gap, 0) - gap;
+    const room = cols - 6 - measureM("KJEL.") - 4;
+    let words = NAV.filter((w) => w !== "WRITING" || hasWriting());
+    if (span(words) > room) words = words.filter((w) => w !== "WRITING");
+    if (span(words) > room) words = [NAV.includes(section) ? section : words[words.length - 1]];
+    const total = span(words);
     let nx = cols - 3 - total;
-    for (const wd of NAV) {
+    for (const wd of words) {
       if (wd === section) { b.marker(nx - 4, row + 1); b.stamp(wd, nx, row, 1, undefined, true); }
       else b.stamp(wd, nx, row, 1, wd, true);
       nx += measureM(wd) + gap;
@@ -661,10 +926,10 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
     b.pinnedRows = wide ? 12 : 22;
     {
       const right = wide ? Math.round(cols * 0.94) : cols - 3, gap = 6;
-      const total = NAV.reduce((s, w) => s + measureM(w) + gap, 0) - gap;
+      const total = navWords(b.wide, hasWriting()).reduce((s, w) => s + measureM(w) + gap, 0) - gap;
       let nx = wide ? right - total : 3; const ny = wide ? 3 : 13;
       b.pinLink(P, "KJEL.", 3, 3, true, "HOME");
-      for (const wd of NAV) { b.pinLink(P, wd, nx, ny, true, wd); nx += measureM(wd) + gap; }
+      for (const wd of navWords(b.wide, hasWriting())) { b.pinLink(P, wd, nx, ny, true, wd); nx += measureM(wd) + gap; }
       bandHalo(b, P, b.pinnedRows);
     }
     if (!e) { b.stamp("NOTHING HERE", 3, Math.round(rows * 0.4), 2); return; }
@@ -712,6 +977,7 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
     if (page !== "HOME") { laser.on = false; laser.p = 0; laser.mask = null; }
     if (page === "HOME") composeHome(b);
     else if (page.startsWith("ENTRY:")) composeEntry(b, page.slice(6));
+    else if (page.startsWith("INDEX:")) composeIndex(b, page.slice(6));
     else composeStrip(b, page.split(":")[1] || "");
   }
 
@@ -720,7 +986,7 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
 
   function updatePreview(b: Board) {
     const L = (preview ??= b.layer());
-    const { cols, rows, wide } = b;
+    const { cols, wide } = b;
     if (current !== "HOME" || !wide) { if (L.key !== "off") { L.key = "off"; L.mask.fill(0); } return; }
     const hot = b.extraLinks.find((l) => l.hover && l.page.startsWith("PIN:") && NAV.includes(l.page.slice(4)));
     const key = hot ? hot.page.slice(4) : "none";
@@ -728,26 +994,29 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
     L.key = key;
     L.mask.fill(0);
     if (!hot) return;
+    const all = live?.writing ?? [];
     const text = key === "WORK"
       ? (live ? `${live.entries} ENTRIES` + (live.pushed ? ` · PUSHED ${live.pushed}` : "") : "THE LEDGER")
+      : key === "WRITING"
+      ? (all.length ? `${all.length} PIECES` + (all[0] ? ` · LATEST ${all[0].date}` : "") : "NOTHING YET")
       : (live?.place || "BROOKLYN, NY");
     // to the left of the menu, on its line, so it never touches the portrait
     const right = Math.round(cols * 0.94);
     const gap = 6;
-    const menuW = NAV.reduce((a, wd) => a + measureM(wd) + gap, 0) - gap;
+    const menuW = navWords(wide, hasWriting()).reduce((a, wd) => a + measureM(wd) + gap, 0) - gap;
     const w = measureM(text);
     b.stampInto(L.mask, text, Math.max(0, right - menuW - 10 - w), 3, 1, true);
     b.haloOf(L);
   }
 
   /* ---------- the ledger's lines turn over on hover, like a split-flap posting the next destination ---------- */
-  type LedgerRow = { x: number; y: number; w: number; lines: string[]; hover: number };
+  type LedgerRow = { x: number; y: number; w: number; lines: string[]; hover: number; right?: boolean };
   let ledgerRows: LedgerRow[] = [];
   let flipL: Layer | null = null;
   function updateFlip(b: Board, t: number) {
     const L = (flipL ??= b.layer());
     const { cols, rows } = b;
-    const on = current === "HOME" && b.wide && !b.life && ledgerRows.length;
+    const on = (current === "HOME" || current === "INDEX:work") && b.wide && !b.life && ledgerRows.length;
     if (!on) { if (L.key !== "off") { L.key = "off"; L.mask.fill(0); L.halo = null; } return; }
     // which line each hovered row shows: the second on hover, the third after a moment
     const ks = ledgerRows.map((r) => (r.hover ? Math.min(r.lines.length - 1, t - r.hover > 1.6 ? 2 : 1) : 0));
@@ -762,7 +1031,8 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
       if (y < 0 || y + 5 > rows) return;
       // the row's line area goes dark, then the next line is posted into it
       for (let yy = y; yy < y + 5; yy++) for (let x = r.x; x < r.x + r.w && x < cols; x++) halo[yy * cols + x] = 1;
-      b.stampInto(L.mask, fit(r.lines[ks[i]], true, r.w), r.x, y, 1, true);
+      const txt = fit(r.lines[ks[i]], true, r.w);
+      b.stampInto(L.mask, txt, r.right ? r.x + r.w - measureM(txt) : r.x, y, 1, true);
     });
   }
 
@@ -781,7 +1051,7 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
     const x0 = scrolled ? 3 + measureM("KJEL.") + 8 : 3;
     let x1: number;
     if (!wide) x1 = cols - 3;
-    else { const right = Math.round(cols * 0.94), navW = NAV.reduce((a, wd) => a + measureM(wd) + 6, 0) - 6; x1 = right - navW - 10; }
+    else { const right = Math.round(cols * 0.94), navW = navWords(b.wide, hasWriting()).reduce((a, wd) => a + measureM(wd) + 6, 0) - 6; x1 = right - navW - 10; }
     const span = x1 - x0;
     if (span < 20) { if (L.key !== "off") { L.key = "off"; L.mask.fill(0); } return; }
     const tw = measureM(TICKER);
@@ -811,6 +1081,7 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
   const GLIDER = [[1, 0], [2, 1], [0, 2], [1, 2], [2, 2]];
   function updateGlider(b: Board, t: number) {
     const L = (glider ??= b.layer());
+    L.glow = true; // a lifeform, not type: the tail stays
     const on = current === "HOME" && b.winRow < 2 && !b.life && gliderAt;
     if (!on) { if (L.key !== "off") { L.key = "off"; L.mask.fill(0); } gliderGen = -1; return; }
     if (gliderGen < 0) { gliderCells.fill(0); for (const [x, y] of GLIDER) gliderCells[y * 7 + x] = 1; gliderGen = 0; gliderAtT = t; }
@@ -946,10 +1217,11 @@ export function createKjelScene(TXT: BoardText, live?: Live) {
     actions: { LIFE: (b: Board) => b.toggleLife(), "LIFE:PLAY": (b: Board) => b.lifePlay(), "LIFE:CLEAR": (b: Board) => b.lifeClear(), "LIFE:INFO": (b: Board) => b.card("life") } as Record<string, (b: Board) => void>,
     rows: (W: number, H: number) => (W / H > 1.05 ? 141 : 153),
     /** total rows of the tall landing: home, the ledger, then what about needs */
-    height: (rows: number, cols: number) => sectionRows(rows, cols, (live?.ledger ?? []).length).ABOUT + Math.max(rows, aboutRows(cols, cols / rows > 1.05)),
+    height: (rows: number, cols: number) => sectionRows(rows, cols, (live?.ledger ?? []).length, notes()).ABOUT + Math.max(rows, aboutRows(cols, cols / rows > 1.05)),
     isHome: () => current === "HOME",
     /** rows an entry needs: at least a screen, more if the text runs long */
+    indexHeight,
     entryHeight: (rows: number, cols: number, slug: string) => { const e = live?.ledger.find((x) => x.slug === slug); return e ? Math.max(rows, entryLayout(rows, cols, e).height) : rows; },
-    sections: (rows: number, cols: number) => sectionRows(rows, cols, (live?.ledger ?? []).length),
+    sections: (rows: number, cols: number) => sectionRows(rows, cols, (live?.ledger ?? []).length, notes()),
   };
 }
