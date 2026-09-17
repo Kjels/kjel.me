@@ -12,7 +12,7 @@ import { PW, PH } from "./portrait";
 
 export type LinkRec = { page: string; col: number; row: number; scale: number; wCols: number; gh: number; hover: boolean; hoverP: number; since?: number; pinned?: boolean };
 /** a dynamic dot layer: mask cells force a lit dot, halo cells force a dark one under raster content */
-export type Layer = { mask: Uint8Array; halo: Uint8Array | null; key: string; /** dots this layer leaves behind go dark at once: for text that moves */ cold?: boolean };
+export type Layer = { mask: Uint8Array; halo: Uint8Array | null; key: string; /** dots this layer leaves behind go dark at once: for text that moves */ cold?: boolean; /** this layer is not type, so its dots may keep their afterglow */ glow?: boolean };
 /** a coloured overlay drawn on top of the dots, faded in and out by `on` */
 export type Fx = { mask: Float32Array | null; on: boolean; p: number; color: (a0: number, a: number) => string };
 export type Box = { x0: number; x1: number; y0: number; y1: number };
@@ -92,6 +92,9 @@ export class Board {
   private heat = new Float32Array(0);
   /** cells lit last frame by a cold layer: they cool without afterglow */
   private coldPrev = new Uint8Array(0);
+  /** cells lit last frame by type. Afterglow is thermal mass on a disc, which is lovely on the
+   *  cursor and on Life and is a smear across a five-dot glyph. Type never glows. */
+  private typePrev = new Uint8Array(0);
   private trailV: Float32Array | null = null;
 
   page: string;
@@ -692,6 +695,7 @@ export class Board {
     this.dotV = new Float32Array(n);
     this.heat = new Float32Array(n);
     this.coldPrev = new Uint8Array(n);
+    this.typePrev = new Uint8Array(n);
     this.trailV = new Float32Array(n);
     this.prevLum = null; this.prevMask = null; this.transStart = -1;
     for (const l of this.layers) { l.mask = new Uint8Array(n); l.halo = null; l.key = ""; }
@@ -782,7 +786,7 @@ export class Board {
     const prevLum = this.prevLum, prevMask = this.prevMask;
     const slashParam = this.slashParam, slashD = this.slashD, faceBox = this.faceBox, guideOK = this.guideOK;
     const layers = this.layers, nL = layers.length;
-    const dotV = this.dotV, heat = this.heat, coldPrev = this.coldPrev;
+    const dotV = this.dotV, heat = this.heat, coldPrev = this.coldPrev, typePrev = this.typePrev;
     // links touched in the last moment ripple: an inverted band sweeps through the word's dots
     const RIP = 0.5;
     const ripples: { x0: number; x1: number; y0: number; y1: number; p: number; pinned: boolean }[] = [];
@@ -837,8 +841,8 @@ export class Board {
       const sp = !useOld && slashParam ? slashParam[vi] : NaN;
       // dynamic layers (the pinned line, the clock, the cyclist) sit in front of everything;
       // their halo is a dark ring that cuts whatever scrolls beneath them
-      let lit = false, haloed = false, cold = false;
-      if (!useOld && !film) for (let k = 0; k < nL; k++) { if (layers[k].mask[i]) { lit = true; cold = !!layers[k].cold; break; } const h = layers[k].halo; if (h && h[i]) haloed = true; }
+      let lit = false, haloed = false, cold = false, glow = false;
+      if (!useOld && !film) for (let k = 0; k < nL; k++) { if (layers[k].mask[i]) { lit = true; cold = !!layers[k].cold; glow = !!layers[k].glow; break; } const h = layers[k].halo; if (h && h[i]) haloed = true; }
       if (lit) target = 1;
       else if (haloed) target = 0;
       else if (m >= 2) target = 1;
@@ -876,11 +880,19 @@ export class Board {
       else if (life && !lit && !haloed) { const ci = ((y / life.k) | 0) * life.gw + ((x / life.k) | 0); target = life.cells[ci] || (ci === lifeCur ? 1 : 0); }
       const pv = dotV[i];
       const wasCold = coldPrev[i]; coldPrev[i] = lit && cold ? 1 : 0;
+      // Type, wherever the light came from: a layer that has not opted into glow, or the composed
+      // board. A halo does not make a dot stop being type -- it is how the ledger erases the line
+      // it is turning over, and that erase is the one that must not leave a ghost.
+      const wasType = typePrev[i]; typePrev[i] = (lit && !glow) || m >= 2 ? 1 : 0;
       // a film runs faster than the board's own pace: the dots flip harder so motion stays legible
       dotV[i] += (target - dotV[i]) * (reduced || wasCold ? 1 : film ? 0.72 : 0.38);
       const v = dotV[i];
       if (!reduced) {
-        if (pv > 0.5 && v <= 0.5) heat[i] = wasCold || film ? 0 : 1;
+        // Afterglow is thermal mass on a disc. It reads as physics on a lifeform and as a smear
+        // on anything else, so only Life and the glider keep it. (The cursor trail is trailV,
+        // a separate decay, and is untouched by this.)
+        const mayGlow = glow || (!!life && !lit && !haloed);
+        if (pv > 0.5 && v <= 0.5) heat[i] = wasCold || film || wasType || !mayGlow ? 0 : 1;
         else if (heat[i] > 0.02) heat[i] *= 0.96;
         else heat[i] = 0;
       }
